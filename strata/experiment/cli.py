@@ -45,7 +45,7 @@ def _is_refusal(error: Exception) -> bool:
     from strata.catalog import CatalogError
     from strata.catalog.config import CatalogConfigError
     from strata.labeller.project import ProjectError
-    from strata.modelling.client import RemoteError
+    from strata.modelling.remote.client import RemoteError
     from strata.modelling.stages import StageError
 
     from .registry import ChainError

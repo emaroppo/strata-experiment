@@ -18,7 +18,7 @@ from strata.catalog import stages as catalog_stages
 from strata.labeller.project import Project
 from strata.modelling import RunStore
 from strata.modelling import stages as modelling_stages
-from strata.modelling.registry import absolute
+from strata.modelling.plugins.registry import absolute
 from strata.modelling.stages import Host
 
 from .ledger import Ledger, StageRecord, now, stage_key
