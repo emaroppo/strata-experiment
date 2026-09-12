@@ -2,6 +2,7 @@
 name = "strata-experiment"
 version = "0.1.0"
 description = "An experiment written down once: stages from a config, a grid over them, and a ledger of what ran"
+readme = "README.md"
 requires-python = ">=3.13"
 # The top of the graph. It sequences the other packages' stages, so it
 # depends on all of them; nothing depends on it.
