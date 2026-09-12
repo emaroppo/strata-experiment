@@ -77,7 +77,7 @@ def catalog(project, tmp_path) -> Catalog:
             group_id=f"g{group}",
             collections=project.collections,
         )
-    label_set = catalog.create_label_set(project.label_set_name, project.schema.catalog_schema())
+    label_set = catalog.label_sets.create(project.label_set_name, project.schema.catalog_schema())
     catalog.annotate_many(
         label_set, [(i, Choices(values=["cat" if n % 3 else "dog"])) for n, i in enumerate(ids)]
     )
