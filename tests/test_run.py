@@ -25,8 +25,8 @@ def test_a_grid_runs_every_trial_and_scores_each_on_the_holdout(
         assert result.run_id is not None
         # The toy predicts cat for everything and two in three answers are cat,
         # so every micro figure is the share of cats on the holdout
-        assert result.metrics["accuracy"] > 0.5
-        assert result.metrics["accuracy"] == result.metrics["recall"] == result.metrics["f1"]
+        assert result.metrics["exact_match"] > 0.5
+        assert result.metrics["exact_match"] == result.metrics["recall"] == result.metrics["f1"]
     assert results[0].run_id != results[1].run_id
 
 
@@ -86,6 +86,19 @@ def test_the_ledger_can_be_placed_elsewhere(project, catalog, experiment_file, t
     run_experiment(load(experiment_file), _handles(project, catalog, tmp_path), ledger=ledger)
     assert (tmp_path / "ledger").exists()
     assert not (project.root / "experiments").exists()
+
+
+def test_a_grid_varies_the_project_as_configured(project, catalog, experiment_file, tmp_path):
+    # The project's own parameters are the base; the file's and the grid's
+    # land on top, key by key
+    toml = project.root / "project.toml"
+    toml.write_text(toml.read_text().replace("[model.params]\n", "[model.params]\nepochs = 3\n"))
+    from strata.labeller.project import Project
+
+    handles = _handles(Project.load(project.root), catalog, tmp_path)
+    [a, b] = run_experiment(load(experiment_file), handles)
+    assert a.records[3].request["params"] == {"epochs": 3, "lr": 0.1}
+    assert b.records[3].request["params"] == {"epochs": 3, "lr": 0.5}
 
 
 def test_an_unlocked_split_is_a_drawn_one(project, catalog, experiment_file, tmp_path):

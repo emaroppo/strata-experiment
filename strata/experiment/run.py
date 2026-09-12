@@ -178,18 +178,22 @@ def _request(spec: StageSpec, handles: Handles, produced: dict[str, BaseModel]) 
             if frozen is not None
             else None
         )
+        # The project as configured, varied where the file says: its
+        # parameters are the base, the file's `params` override them key by
+        # key, and a grid key lands on top of both. A file naming another
+        # model than the project's starts from nothing, since the project's
+        # parameters were written for its own.
+        model = args.pop("model", project.model.ref)
+        own = model == project.model.ref
+        params = {**(project.model.params if own else {}), **args.pop("params", {})}
+        fresh_params = args.pop("fresh_params", project.model.fresh_params if own else {})
         return modelling_stages.TrainStageRequest(
             dataset_dir=produced["dataset_dir"].directory,
             dataset=identity,
             # Anchored at the project, because a model.py belongs to the job
-            model=absolute(args.pop("model", project.model.ref), project.root),
-            # The file's parameters are the whole of them: a trial that says
-            # `params` gets exactly those, not those plus the project's
-            # cold-start extras. Absent, the project's own apply as a round's do.
-            params=args.pop("params", project.model.params),
-            fresh_params=args.pop(
-                "fresh_params", {} if "params" in spec.args else project.model.fresh_params
-            ),
+            model=absolute(model, project.root),
+            params=params,
+            fresh_params=fresh_params,
             features=[s.as_dict() for s in project.feature_specs],
             **args,
         )

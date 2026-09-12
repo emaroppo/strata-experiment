@@ -26,7 +26,7 @@ def test_run_reports_each_trial(experiment_file, config_file, capsys):
     assert main(["run", str(experiment_file), "--config", str(config_file)]) == 0
     out = capsys.readouterr().out
     assert out.count("trial ") == 2
-    assert "evaluate     ran" in out and "accuracy=" in out
+    assert "evaluate     ran" in out and "exact_match=" in out
 
     assert main(["--json", "run", str(experiment_file), "--config", str(config_file)]) == 0
     payload = json.loads(capsys.readouterr().out)

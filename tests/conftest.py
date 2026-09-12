@@ -50,7 +50,11 @@ def project(tmp_path, monkeypatch) -> Project:
     Project.create(root, name="demo", classes=["cat", "dog"])
     (root / "toy.py").write_text(TOY)
     toml = root / "project.toml"
-    toml.write_text(re.sub(r'^ref = ".*"$', 'ref = "toy.py:Toy"', toml.read_text(), flags=re.M))
+    text = re.sub(r'^ref = ".*"$', 'ref = "toy.py:Toy"', toml.read_text(), flags=re.M)
+    # The template's parameters are the image baseline's; the toy takes its own
+    text = re.sub(r"^\[model\.params\]\n(?:\w+ = .*\n)*", "[model.params]\n", text, flags=re.M)
+    text = re.sub(r"^\[model\.fresh_params\]\n(?:\w+ = .*\n)*", "", text, flags=re.M)
+    toml.write_text(text)
     return Project.load(root)
 
 
