@@ -26,10 +26,13 @@ class ChainError(ValueError):
 STAGES: dict[str, tuple[Stage, frozenset[str]]] = {
     "dataset": (
         catalog_stages.STAGES[0],
-        frozenset({"name", "val_ratio", "holdout_ratio", "seed"}),
+        frozenset({"name", "val_ratio", "holdout_ratio", "seed", "group_by"}),
     ),
     "materialise": (catalog_stages.STAGES[1], frozenset()),
-    "split": (catalog_stages.STAGES[2], frozenset({"seed", "val_ratio", "holdout_ratio"})),
+    "split": (
+        catalog_stages.STAGES[2],
+        frozenset({"seed", "val_ratio", "holdout_ratio", "group_by"}),
+    ),
     "train": (
         modelling_stages.STAGES[0],
         frozenset({"model", "params", "fresh_params", "fresh", "parent"}),

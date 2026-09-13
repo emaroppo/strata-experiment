@@ -185,11 +185,15 @@ def _request(
     with what upstream produced wired in."""
     project = handles.project
     args = dict(spec.args)
+    # The project's grouping, unless the file says otherwise — including
+    # saying none, since a study may want to split what the project keeps
+    # together
+    grouping = {"group_by": project.catalog.group_by or None}
     if spec.use == "dataset":
         return catalog_stages.DatasetRequest(
             label_set=project.label_set_name,
             collections=project.collections,
-            **{"name": project.dataset_name, **args},
+            **{"name": project.dataset_name, **grouping, **args},
         )
     if spec.use == "materialise":
         return catalog_stages.MaterialiseRequest(
@@ -197,7 +201,9 @@ def _request(
             features=[s.as_dict() for s in project.feature_specs],
         )
     if spec.use == "split":
-        return catalog_stages.SplitRequest(dataset_dir=produced["dataset_dir"].directory, **args)
+        return catalog_stages.SplitRequest(
+            dataset_dir=produced["dataset_dir"].directory, **{**grouping, **args}
+        )
     if spec.use == "train":
         frozen = produced.get("dataset_version")
         identity = (

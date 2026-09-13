@@ -74,7 +74,7 @@ def catalog(project, tmp_path) -> Catalog:
         ids += catalog.ingest(
             paths[group * 3 : group * 3 + 3],
             media="image",
-            group_id=f"g{group}",
+            metadata={"video": f"g{group}"},
             collections=project.collections,
         )
     label_set = catalog.label_sets.create(project.label_set_name, project.schema.catalog_schema())
