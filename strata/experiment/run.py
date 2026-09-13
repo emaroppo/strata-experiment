@@ -190,10 +190,12 @@ def _request(
     # together
     grouping = {"group_by": project.catalog.group_by or None}
     if spec.use == "dataset":
+        # And the split the project says its corpus arrived with, the same way
+        declared = {**grouping, "given": project.catalog.given_split}
         return catalog_stages.DatasetRequest(
             label_set=project.label_set_name,
             collections=project.collections,
-            **{"name": project.dataset_name, **grouping, **args},
+            **{"name": project.dataset_name, **declared, **args},
         )
     if spec.use == "materialise":
         return catalog_stages.MaterialiseRequest(

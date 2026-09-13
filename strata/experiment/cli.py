@@ -169,7 +169,12 @@ def _run(args) -> int:
 def _summary(record) -> str:
     body = record.record
     if record.stage == "dataset":
-        return f"  {body['name']} v{body['version']}, {body['samples']} sample(s)"
+        note = f"  {body['name']} v{body['version']}, {body['samples']} sample(s)"
+        if body.get("given"):
+            note += f", {body['given']} side(s) given"
+        if body.get("groups_cut"):
+            note += f", {body['groups_cut']} group(s) cut by them"
+        return note
     if record.stage == "materialise":
         return (
             f"  {body['train']} train, {body['val']} val, {body['holdout']} holdout"
