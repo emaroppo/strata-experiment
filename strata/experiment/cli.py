@@ -179,6 +179,11 @@ def _summary(record) -> str:
         return (
             f"  {body['train']} train, {body['val']} val, {body['holdout']} holdout"
             + (f", {body['fetched']} fetched" if body["fetched"] else "")
+            + (
+                f", {body['disputed']} left out over a disputed feature"
+                if body.get("disputed")
+                else ""
+            )
         )
     if record.stage == "split":
         return "  drawn" if body["drawn"] else "  inherited"
