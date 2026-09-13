@@ -1,12 +1,14 @@
 """Running an experiment: deciding the calls, and recording what came back.
 
-For each trial, for each stage: the key is computed from the spec alone;
-if the ledger holds a record under it the record is reused, otherwise the
-request is built — the file's arguments, the project's declarations, and
-what upstream stages produced — the stage runs, and the record is written.
-Nothing here trains or freezes anything itself.
+For each trial, for each stage: the request is built — the file's
+arguments, the project's declarations, and what upstream stages produced —
+and the key is computed from the spec through that stage, the request, and
+the catalog in use. If the ledger holds a record under the key it is
+reused; otherwise the stage runs and the record is written. Nothing here
+trains or freezes anything itself.
 """
 
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -23,7 +25,7 @@ from strata.modelling.stages import Host
 
 from .ledger import Ledger, StageRecord, now, stage_key
 from .registry import check, resolve
-from .spec import Experiment, StageSpec, Trial
+from .spec import Experiment, ExperimentError, StageSpec, Trial
 
 
 @dataclass
@@ -84,6 +86,11 @@ def run_experiment(
 ) -> list[TrialResult]:
     """Every trial in order, each stage run or reused, everything recorded."""
     check(experiment)
+    if experiment.project_id != handles.project.name:
+        raise ExperimentError(
+            f"The file was loaded for project {experiment.project_id!r} and is being run "
+            f"over {handles.project.name!r}."
+        )
     ledger = ledger or Ledger.under(handles.project.root)
     ledger.experiment_dir(experiment)
     say = on_event or (lambda *_: None)
@@ -99,9 +106,12 @@ def _run_trial(
 ) -> TrialResult:
     result = TrialResult(trial=trial)
     produced: dict[str, BaseModel] = {}
+    catalog_id = handles.catalog.id
     for index, spec in enumerate(trial.experiment.stages):
         stage, _ = resolve(spec.use)
-        key = stage_key(trial.experiment, index, stage.version)
+        request = _request(spec, handles, produced, experiment.id)
+        asked = portable(request.model_dump(mode="json"), handles.project.root)
+        key = stage_key(trial.experiment, index, stage.version, asked, catalog_id)
         found = ledger.find(key)
         if found is not None:
             record = RECORDS[spec.use].model_validate(found.record)
@@ -112,7 +122,6 @@ def _run_trial(
             say("reused", trial, found)
             continue
 
-        request = _request(spec, handles, produced)
         started = now()
         record = stage.run(request, _context(spec.use, handles))
         written = StageRecord(
@@ -120,7 +129,7 @@ def _run_trial(
             stage=stage.name,
             version=stage.version,
             key=key,
-            request=request.model_dump(mode="json"),
+            request=asked,
             record=record.model_dump(mode="json"),
             started=started,
             finished=now(),
@@ -147,7 +156,31 @@ def _context(name: str, handles: Handles):
     )
 
 
-def _request(spec: StageSpec, handles: Handles, produced: dict[str, BaseModel]) -> BaseModel:
+def portable(payload: Any, root: Path) -> Any:
+    """``payload`` with every path under ``root`` made relative to it.
+
+    A request names directories under the project, and a key has to
+    survive the project moving: the same file beside the same project on
+    another machine is the same experiment, and its ledger should read the
+    same there.
+    """
+    prefix = str(Path(root).resolve()) + os.sep
+
+    def walk(value: Any) -> Any:
+        if isinstance(value, dict):
+            return {k: walk(v) for k, v in value.items()}
+        if isinstance(value, list):
+            return [walk(v) for v in value]
+        if isinstance(value, str) and value.startswith(prefix):
+            return value[len(prefix) :]
+        return value
+
+    return walk(payload)
+
+
+def _request(
+    spec: StageSpec, handles: Handles, produced: dict[str, BaseModel], experiment_id: str
+) -> BaseModel:
     """The stage's request: the file's arguments over the project's declarations,
     with what upstream produced wired in."""
     project = handles.project
@@ -195,6 +228,7 @@ def _request(spec: StageSpec, handles: Handles, produced: dict[str, BaseModel]) 
             params=params,
             fresh_params=fresh_params,
             features=[s.as_dict() for s in project.feature_specs],
+            experiment_id=experiment_id,
             **args,
         )
     if spec.use == "evaluate":

@@ -2,8 +2,11 @@
 
 import json
 
-from strata.experiment import Ledger, load, run_experiment
+import pytest
+
+from strata.experiment import ExperimentError, Ledger, load, run_experiment
 from strata.experiment.run import Handles
+from strata.modelling import RunStore
 
 
 def _handles(project, catalog, tmp_path) -> Handles:
@@ -107,4 +110,48 @@ def test_an_unlocked_split_is_a_drawn_one(project, catalog, experiment_file, tmp
     [a, b] = run_experiment(drawn, handles)
     assert a.records[2].record["drawn"] is True
     assert a.records[2].record["directory"] != a.records[1].record["directory"]
-    assert a.records[2].record["sides"] == b.records[2].record["sides"]
+    # The draw itself is what each run saw, in the run store: both trials
+    # trained on the same drawn sides, and the holdout is a real one
+    store = RunStore.local(project.runs_dir)
+    assert store.saw(a.run_id) == store.saw(b.run_id)
+    assert store.saw(a.run_id)["holdout"]
+
+
+def test_a_run_names_its_experiment_and_what_it_saw(project, catalog, experiment_file, tmp_path):
+    experiment = load(experiment_file)
+    [a, b] = run_experiment(experiment, _handles(project, catalog, tmp_path))
+    store = RunStore.local(project.runs_dir)
+    assert store.get(a.run_id).experiment_id == experiment.id
+    # A study is a query over the store
+    assert [r.id for r in store.for_experiment(experiment.id)] == [a.run_id, b.run_id]
+    saw = store.saw(a.run_id)
+    assert {side: len(sums) for side, sums in saw.items()} == a.records[2].record["counts"]
+
+
+def test_a_change_in_the_project_reruns_what_reads_it(project, catalog, experiment_file, tmp_path):
+    handles = _handles(project, catalog, tmp_path)
+    run_experiment(load(experiment_file), handles)
+    # The file is unchanged; the project it runs over is not
+    toml = project.root / "project.toml"
+    toml.write_text(toml.read_text().replace("[model.params]\n", "[model.params]\nepochs = 3\n"))
+    from strata.labeller.project import Project
+
+    handles = _handles(Project.load(project.root), catalog, tmp_path)
+    [a, b] = run_experiment(load(experiment_file), handles)
+    assert [r.reused for r in a.records] == [True, True, True, False, False]
+    assert a.records[3].request["params"] == {"epochs": 3, "lr": 0.1}
+
+
+def test_the_ledger_holds_no_path_of_this_machine(project, catalog, experiment_file, tmp_path):
+    [a, _] = run_experiment(load(experiment_file), _handles(project, catalog, tmp_path))
+    for record in a.records:
+        for value in record.request.values():
+            assert not str(value).startswith(str(project.root)), (record.stage, value)
+    assert a.records[3].request["dataset_dir"].startswith("datasets/")
+    assert a.records[3].request["model"] == "toy.py:Toy"
+
+
+def test_a_file_loaded_for_another_project_is_refused(project, catalog, experiment_file, tmp_path):
+    experiment = load(experiment_file).model_copy(update={"project_id": "other"})
+    with pytest.raises(ExperimentError, match="'other'"):
+        run_experiment(experiment, _handles(project, catalog, tmp_path))

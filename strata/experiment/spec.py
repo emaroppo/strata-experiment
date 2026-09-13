@@ -8,6 +8,11 @@ what a field means changes the hash even when the text does not.
 A trial is the base file plus overrides, applied to the payload before
 validation and hashing — so the hash is taken over the effective config,
 and two trials under different overrides are two identities.
+
+The file names its project by how to find it; the hash covers the
+project's identity instead, bound from the project itself at load. The
+same file beside the same project on another machine is the same
+experiment, whatever path it was reached by.
 """
 
 import copy
@@ -49,9 +54,13 @@ class Experiment(Strict):
     """One named, reproducible sequence over a project, with its variation."""
 
     schema_version: int = SCHEMA_VERSION
-    #: The project directory, as the CLI resolves one: a name under
-    #: ``projects/`` or a path.
+    #: How to find the project, as the file wrote it: a name under
+    #: ``projects/`` or a path. Not in the hash.
     project: str
+    #: The project's identity, which the hash covers: its name, as
+    #: ``project.toml`` declares it. Bound from the project at load, never
+    #: written in the file.
+    project_id: str
     name: str
     stages: list[StageSpec]
     #: ``"<stage>.<dotted.key>"`` to the values it takes, one trial per
@@ -82,8 +91,14 @@ class Experiment(Strict):
         return self
 
     def canonical(self) -> dict[str, Any]:
-        """The form that gets hashed: every default materialised, nothing implied."""
-        return self.model_dump(mode="python")
+        """The form that gets hashed: every default materialised, nothing implied.
+
+        The project is in it by identity, not by the path the file used to
+        find it.
+        """
+        payload = self.model_dump(mode="python")
+        payload.pop("project")
+        return payload
 
     @property
     def id(self) -> str:
@@ -102,7 +117,7 @@ class Experiment(Strict):
         """
         return {
             "schema_version": self.schema_version,
-            "project": self.project,
+            "project": self.project_id,
             "stages": [s.model_dump(mode="python") for s in self.stages[: upto + 1]],
         }
 
@@ -168,19 +183,42 @@ class Trial(Strict):
 
 
 def load(path: Path, overrides: dict[str, Any] | None = None) -> Experiment:
-    """Read an experiment file, applying ``overrides`` before validation."""
+    """Read an experiment file, applying ``overrides`` before validation.
+
+    The project the file names is loaded here, for its identity: a file
+    naming a project that cannot be found is refused at load.
+    """
     with open(path, "rb") as f:
         payload = tomllib.load(f)
-    return from_payload(payload, overrides)
+    locator = payload.get("project")
+    if not isinstance(locator, str) or not locator:
+        raise ExperimentError("An experiment file needs `project`, the project it runs over.")
+    return from_payload(payload, overrides, project_id=identity_of(locator))
 
 
-def from_payload(payload: dict, overrides: dict[str, Any] | None = None) -> Experiment:
+def identity_of(locator: str) -> str:
+    """The identity of the project ``locator`` finds: its declared name."""
+    from strata.labeller.project import Project
+
+    return Project.load(Path(locator)).name
+
+
+def from_payload(
+    payload: dict, overrides: dict[str, Any] | None = None, *, project_id: str
+) -> Experiment:
     payload = dict(payload)
+    if "project_id" in payload:
+        raise ExperimentError(
+            "`project_id` is not a key of the file: the identity comes from the project "
+            "that `project` names."
+        )
     stages = payload.pop("stage", None)
     if stages is None:
         raise ExperimentError("An experiment file needs at least one [[stage]] table.")
     try:
-        experiment = Experiment(stages=[StageSpec.from_table(s) for s in stages], **payload)
+        experiment = Experiment(
+            stages=[StageSpec.from_table(s) for s in stages], project_id=project_id, **payload
+        )
     except (ValueError, TypeError) as e:
         raise ExperimentError(str(e)) from None
     if overrides:

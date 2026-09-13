@@ -3,11 +3,13 @@
 Under the project's ``experiments/``: one ``records/`` directory holding
 every stage record by its key, and one directory per experiment with one
 per trial, where each stage's record is copied under its position. The key
-is the hash of the canonical spec through that stage plus the version of
-the implementation that ran it, so two trials — or two experiments — that
-agree on everything through a stage share its record, and a stage whose
+is the hash of the canonical spec through that stage, the version of the
+implementation that ran it, the request as it was actually built, and the
+catalog it was built against — so two trials, or two experiments, that
+agree on all of that through a stage share its record, and a stage whose
 key already has one is not run again. Nothing is ever invalidated: a
-changed upstream argument changes every key after it.
+changed argument, a changed project, or a rerun upstream changes every key
+after it.
 """
 
 import json
@@ -52,9 +54,27 @@ class TrialRecord(BaseModel):
     spec: dict[str, Any] = Field(default_factory=dict)
 
 
-def stage_key(experiment: Experiment, index: int, version: str) -> str:
-    """The identity of a stage's position: everything upstream, and what ran it."""
-    return content_hash({"prefix": experiment.prefix(index), "version": version})
+def stage_key(
+    experiment: Experiment, index: int, version: str, request: dict, catalog_id: str | None
+) -> str:
+    """The identity of a stage's position: everything upstream, what ran it,
+    what it was asked, and where.
+
+    ``request`` is the effective request in portable form. It carries what
+    the project supplied and what upstream produced, so an edit to
+    ``project.toml`` or a rerun upstream moves the key rather than reusing
+    a record made under the old inputs. ``catalog_id`` is the catalog the
+    stages were handed, so a record made against one catalog is never
+    handed to a run over another.
+    """
+    return content_hash(
+        {
+            "prefix": experiment.prefix(index),
+            "version": version,
+            "request": request,
+            "catalog": catalog_id,
+        }
+    )
 
 
 class Ledger:
@@ -72,7 +92,14 @@ class Ledger:
         path = directory / "experiment.json"
         if not path.exists():
             path.write_text(
-                _dumps({"id": experiment.id, "name": experiment.name, **experiment.canonical()})
+                _dumps(
+                    {
+                        "id": experiment.id,
+                        "name": experiment.name,
+                        "project_as_written": experiment.project,
+                        **experiment.canonical(),
+                    }
+                )
             )
         return directory
 
