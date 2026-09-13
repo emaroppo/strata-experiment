@@ -26,7 +26,7 @@ class ChainError(ValueError):
 STAGES: dict[str, tuple[Stage, frozenset[str]]] = {
     "dataset": (
         catalog_stages.STAGES[0],
-        frozenset({"name", "val_ratio", "holdout_ratio", "seed", "group_by"}),
+        frozenset({"name", "val_ratio", "holdout_ratio", "seed", "group_by", "inherit"}),
     ),
     "materialise": (catalog_stages.STAGES[1], frozenset()),
     "split": (
