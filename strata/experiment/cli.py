@@ -44,7 +44,7 @@ def main(argv: list[str] | None = None) -> int:
 def _is_refusal(error: Exception) -> bool:
     from strata.catalog import CatalogError
     from strata.catalog.config import CatalogConfigError
-    from strata.labeller.project import ProjectError
+    from strata.labeller import ProjectError
     from strata.modelling.remote.client import RemoteError
     from strata.modelling.stages import StageError
 
@@ -111,8 +111,7 @@ def _check(args) -> int:
 
 def _run(args) -> int:
     from strata.catalog.config import open_catalog
-    from strata.labeller.config import Settings
-    from strata.labeller.project import Project
+    from strata.labeller import Project, Settings
     from strata.modelling.stages import Host
 
     from .run import Handles, run_experiment

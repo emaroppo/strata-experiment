@@ -6,7 +6,7 @@ from strata.experiment import ChainError, ExperimentError, load
 from strata.experiment.registry import check
 from strata.experiment.spec import ExperimentError as _ExperimentError
 from strata.experiment.spec import from_payload
-from strata.labeller.project import ProjectError
+from strata.labeller import ProjectError
 
 assert _ExperimentError is ExperimentError
 

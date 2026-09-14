@@ -17,7 +17,7 @@ from pydantic import BaseModel
 
 from strata.catalog import Catalog
 from strata.catalog import stages as catalog_stages
-from strata.labeller.project import Project
+from strata.labeller import Project
 from strata.modelling import RunStore
 from strata.modelling import stages as modelling_stages
 from strata.modelling.plugins.registry import absolute

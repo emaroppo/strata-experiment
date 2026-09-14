@@ -96,7 +96,7 @@ def test_a_grid_varies_the_project_as_configured(project, catalog, experiment_fi
     # land on top, key by key
     toml = project.root / "project.toml"
     toml.write_text(toml.read_text().replace("[model.params]\n", "[model.params]\nepochs = 3\n"))
-    from strata.labeller.project import Project
+    from strata.labeller import Project
 
     handles = _handles(Project.load(project.root), catalog, tmp_path)
     [a, b] = run_experiment(load(experiment_file), handles)
@@ -134,7 +134,7 @@ def test_a_change_in_the_project_reruns_what_reads_it(project, catalog, experime
     # The file is unchanged; the project it runs over is not
     toml = project.root / "project.toml"
     toml.write_text(toml.read_text().replace("[model.params]\n", "[model.params]\nepochs = 3\n"))
-    from strata.labeller.project import Project
+    from strata.labeller import Project
 
     handles = _handles(Project.load(project.root), catalog, tmp_path)
     [a, b] = run_experiment(load(experiment_file), handles)

@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from strata.catalog import Catalog
-from strata.labeller.project import Project
+from strata.labeller import Project
 from strata.labels import Choices
 
 TOY = '''
