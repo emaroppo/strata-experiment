@@ -180,7 +180,7 @@ def portable(payload: Any, root: Path) -> Any:
 R = TypeVar("R", bound=BaseModel)
 
 
-def _produced(produced: dict[str, BaseModel], kind: str, cls: type[R]) -> R:
+def _produced[R: BaseModel](produced: dict[str, BaseModel], kind: str, cls: type[R]) -> R:
     """What an upstream stage produced under ``kind``, as the record it must be.
 
     The kinds are opaque strings to the chain check; here is where a kind

@@ -34,7 +34,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         return args.run(args)
-    except Exception as e:  # noqa: BLE001 - every refusal below is a message, not a crash
+    except Exception as e:
         if _is_refusal(e):
             print(str(e), file=sys.stderr)
             return 1

@@ -137,7 +137,7 @@ def test_a_change_in_the_project_reruns_what_reads_it(project, catalog, experime
     from strata.project import Project
 
     handles = _handles(Project.load(project.root), catalog, tmp_path)
-    [a, b] = run_experiment(load(experiment_file), handles)
+    [a, _b] = run_experiment(load(experiment_file), handles)
     assert [r.reused for r in a.records] == [True, True, True, False, False]
     assert a.records[3].request["params"] == {"epochs": 3, "lr": 0.1}
 
