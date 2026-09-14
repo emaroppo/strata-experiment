@@ -11,7 +11,7 @@ trains or freezes anything itself.
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeVar
 
 from pydantic import BaseModel
 from strata.project import Project
@@ -177,6 +177,36 @@ def portable(payload: Any, root: Path) -> Any:
     return walk(payload)
 
 
+R = TypeVar("R", bound=BaseModel)
+
+
+def _produced(produced: dict[str, BaseModel], kind: str, cls: type[R]) -> R:
+    """What an upstream stage produced under ``kind``, as the record it must be.
+
+    The kinds are opaque strings to the chain check; here is where a kind
+    meets the record type a request reads fields from, and a mismatch is a
+    wiring error named at the stage rather than an attribute error later.
+    """
+    record = produced[kind]
+    if not isinstance(record, cls):
+        raise ExperimentError(
+            f"{kind!r} was produced as {type(record).__name__}, not {cls.__name__}"
+        )
+    return record
+
+
+def _materialised(produced: dict[str, BaseModel]):
+    """The dataset directory, whichever stage last produced one."""
+    record = produced["dataset_dir"]
+    if not isinstance(record, (catalog_stages.MaterialiseRecord, catalog_stages.SplitRecord)):
+        raise ExperimentError(f"'dataset_dir' was produced as {type(record).__name__}")
+    return record.directory
+
+
+def _frozen(produced: dict[str, BaseModel]):
+    return _produced(produced, "dataset_version", catalog_stages.DatasetRecord)
+
+
 def _request(
     spec: StageSpec, handles: Handles, produced: dict[str, BaseModel], experiment_id: str
 ) -> BaseModel:
@@ -198,15 +228,20 @@ def _request(
         )
     if spec.use == "materialise":
         return catalog_stages.MaterialiseRequest(
-            dataset_id=produced["dataset_version"].dataset_id,
+            dataset_id=_frozen(produced).dataset_id,
             features=[s.as_dict() for s in project.feature_specs],
         )
     if spec.use == "split":
         return catalog_stages.SplitRequest(
-            dataset_dir=produced["dataset_dir"].directory, **{**grouping, **args}
+            dataset_dir=_materialised(produced),
+            **{**grouping, **args},
         )
     if spec.use == "train":
-        frozen = produced.get("dataset_version")
+        frozen = (
+            _frozen(produced)
+            if "dataset_version" in produced
+            else None
+        )
         identity = (
             modelling_stages.DatasetIdentity(
                 dataset_id=frozen.dataset_id,
@@ -228,7 +263,7 @@ def _request(
         params = {**(project.model.params if own else {}), **args.pop("params", {})}
         fresh_params = args.pop("fresh_params", project.model.fresh_params if own else {})
         return modelling_stages.TrainStageRequest(
-            dataset_dir=produced["dataset_dir"].directory,
+            dataset_dir=_materialised(produced),
             dataset=identity,
             model=project.model_ref(model),
             params=params,
@@ -239,8 +274,8 @@ def _request(
         )
     if spec.use == "evaluate":
         return modelling_stages.EvaluateRequest(
-            run_id=produced["run"].run_id,
-            dataset_dir=produced["dataset_dir"].directory,
+            run_id=_produced(produced, "run", modelling_stages.TrainRecord).run_id,
+            dataset_dir=_materialised(produced),
             side=args.get("on", "holdout"),
         )
     raise AssertionError(f"no wiring for {spec.use}: the registry and this table disagree")
