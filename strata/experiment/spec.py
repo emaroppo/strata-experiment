@@ -198,7 +198,7 @@ def load(path: Path, overrides: dict[str, Any] | None = None) -> Experiment:
 
 def identity_of(locator: str) -> str:
     """The identity of the project ``locator`` finds: its declared name."""
-    from strata.labeller import Project
+    from strata.project import Project
 
     return Project.load(Path(locator)).name
 

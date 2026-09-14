@@ -4,9 +4,9 @@ import re
 from pathlib import Path
 
 import pytest
+from strata.project import Project
 
 from strata.catalog import Catalog
-from strata.labeller import Project
 from strata.labels import Choices
 
 TOY = '''
@@ -77,7 +77,7 @@ def catalog(project, tmp_path) -> Catalog:
             metadata={"video": f"g{group}"},
             collections=project.collections,
         )
-    label_set = catalog.label_sets.create(project.label_set_name, project.schema.catalog_schema())
+    label_set = catalog.label_sets.create(project.label_set_name, project.label_set.schema)
     catalog.annotations.annotate_many(
         label_set, [(i, Choices(values=["cat" if n % 3 else "dog"])) for n, i in enumerate(ids)]
     )

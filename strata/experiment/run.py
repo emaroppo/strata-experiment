@@ -14,13 +14,12 @@ from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel
+from strata.project import Project
 
 from strata.catalog import Catalog
 from strata.catalog import stages as catalog_stages
-from strata.labeller import Project
 from strata.modelling import RunStore
 from strata.modelling import stages as modelling_stages
-from strata.modelling.plugins.registry import absolute
 from strata.modelling.stages import Host
 
 from .ledger import Ledger, StageRecord, now, stage_key
@@ -231,8 +230,7 @@ def _request(
         return modelling_stages.TrainStageRequest(
             dataset_dir=produced["dataset_dir"].directory,
             dataset=identity,
-            # Anchored at the project, because a model.py belongs to the job
-            model=absolute(model, project.root),
+            model=project.model_ref(model),
             params=params,
             fresh_params=fresh_params,
             features=[s.as_dict() for s in project.feature_specs],
