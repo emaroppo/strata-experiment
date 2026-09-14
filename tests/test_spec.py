@@ -35,7 +35,11 @@ def _payload(**overrides):
 def test_a_file_loads_and_its_stages_keep_their_arguments(experiment_file):
     experiment = load(experiment_file)
     assert [s.use for s in experiment.stages] == [
-        "dataset", "materialise", "split", "train", "evaluate"
+        "dataset",
+        "materialise",
+        "split",
+        "train",
+        "evaluate",
     ]
     assert experiment.stages[0].args == {"val_ratio": 0.2, "holdout_ratio": 0.2}
     assert experiment.stages[3].args == {"fresh": True, "params": {"lr": 0.1}}
@@ -53,9 +57,7 @@ def test_the_id_is_over_meaning_not_text():
 
 
 def test_a_grid_expands_to_every_combination_in_order():
-    experiment = _load(
-        _payload(grid={"train.params.lr": [0.1, 0.5], "dataset.seed": [1, 2]})
-    )
+    experiment = _load(_payload(grid={"train.params.lr": [0.1, 0.5], "dataset.seed": [1, 2]}))
     trials = experiment.trials()
     assert [t.overrides for t in trials] == [
         {"train.params.lr": 0.1, "dataset.seed": 1},

@@ -26,9 +26,7 @@ class ChainError(ValueError):
 STAGES: dict[str, tuple[Stage, frozenset[str]]] = {
     "dataset": (
         catalog_stages.STAGES[0],
-        frozenset(
-            {"name", "val_ratio", "holdout_ratio", "seed", "group_by", "inherit", "given"}
-        ),
+        frozenset({"name", "val_ratio", "holdout_ratio", "seed", "group_by", "inherit", "given"}),
     ),
     "materialise": (catalog_stages.STAGES[1], frozenset()),
     "split": (
@@ -81,7 +79,7 @@ def check(experiment: Experiment) -> None:
             if not spec.args.get("fresh") and not spec.args.get("parent"):
                 raise ChainError(
                     "A grid needs every trial cold, or every trial continued from one named "
-                    "parent: set `fresh = true` or `parent = \"<run id>\"` on the train "
+                    'parent: set `fresh = true` or `parent = "<run id>"` on the train '
                     "stage. Warm-starting each trial from the previous one would make the "
                     "results depend on the order they ran in."
                 )

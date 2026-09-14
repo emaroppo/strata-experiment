@@ -237,11 +237,7 @@ def _request(
             **{**grouping, **args},
         )
     if spec.use == "train":
-        frozen = (
-            _frozen(produced)
-            if "dataset_version" in produced
-            else None
-        )
+        frozen = _frozen(produced) if "dataset_version" in produced else None
         identity = (
             modelling_stages.DatasetIdentity(
                 dataset_id=frozen.dataset_id,

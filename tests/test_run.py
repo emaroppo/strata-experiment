@@ -19,11 +19,16 @@ def test_a_grid_runs_every_trial_and_scores_each_on_the_holdout(
     results = run_experiment(load(experiment_file), _handles(project, catalog, tmp_path))
 
     assert [r.trial.overrides for r in results] == [
-        {"train.params.lr": 0.1}, {"train.params.lr": 0.5}
+        {"train.params.lr": 0.1},
+        {"train.params.lr": 0.5},
     ]
     for result in results:
         assert [r.stage for r in result.records] == [
-            "dataset", "materialise", "split", "train", "evaluate"
+            "dataset",
+            "materialise",
+            "split",
+            "train",
+            "evaluate",
         ]
         assert result.run_id is not None
         # The toy predicts cat for everything and two in three answers are cat,

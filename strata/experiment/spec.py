@@ -76,8 +76,7 @@ class Experiment(Strict):
             stage, _, path = key.partition(".")
             if not path:
                 raise ExperimentError(
-                    f"A grid key names a stage and a key inside it, `train.params.lr`; "
-                    f"got {key!r}."
+                    f"A grid key names a stage and a key inside it, `train.params.lr`; got {key!r}."
                 )
             if stage not in names:
                 raise ExperimentError(f"Grid key {key!r} names a stage this file does not use.")

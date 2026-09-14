@@ -35,8 +35,17 @@ def test_run_reports_each_trial(experiment_file, config_file, capsys):
 
 
 def test_set_overrides_the_file(experiment_file, config_file, capsys):
-    code = main(["--json", "run", str(experiment_file), "--config", str(config_file),
-                 "--set", "train.params.lr=0.9"])
+    code = main(
+        [
+            "--json",
+            "run",
+            str(experiment_file),
+            "--config",
+            str(config_file),
+            "--set",
+            "train.params.lr=0.9",
+        ]
+    )
     assert code == 0
     [trial] = json.loads(capsys.readouterr().out)
     assert trial["records"][3]["request"]["params"] == {"lr": 0.9}
