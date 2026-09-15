@@ -78,14 +78,19 @@ is recorded either way.
 
 ## Decisions
 
-The design in full is `docs/orchestrator.md` in the umbrella repository,
-with the frozen version and its holdout in `docs/adr/0003`.
+The design in full is `docs/orchestrator.md` in the strata umbrella
+repository (https://github.com/emaroppo/strata), with the frozen version and its
+holdout in its `docs/adr/0003`. `docs/adr/NNNN`, wherever this package's code says it, is a record in the strata umbrella repository: https://github.com/emaroppo/strata/tree/main/docs/adr.
 
 ## Tests
 
 ```bash
-uv run pytest packages/experiment
+.github/sibling-wheels.sh labels common catalog modelling project   # the strata packages this one needs, until they are on an index
+uv sync --find-links dist --group dev --extra test
+uv run pytest
 ```
+
+Inside the strata workspace: `uv run pytest packages/experiment` from its root.
 
 The suite runs against a toy model and a temporary catalog; nothing needs
 a GPU.
