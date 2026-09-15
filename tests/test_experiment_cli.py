@@ -49,3 +49,13 @@ def test_set_overrides_the_file(experiment_file, config_file, capsys):
     assert code == 0
     [trial] = json.loads(capsys.readouterr().out)
     assert trial["records"][3]["request"]["params"] == {"lr": 0.9}
+
+
+def test_the_environment_names_the_config(experiment_file, config_file, capsys, monkeypatch):
+    monkeypatch.setenv("STRATA_CONFIG", str(config_file))
+    assert main(["--json", "run", str(experiment_file)]) == 0
+    assert len(json.loads(capsys.readouterr().out)) == 2
+
+    monkeypatch.setenv("STRATA_CONFIG", str(config_file.parent / "absent.toml"))
+    assert main(["run", str(experiment_file)]) == 1
+    assert "STRATA_CONFIG" in capsys.readouterr().err

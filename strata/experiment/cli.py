@@ -27,7 +27,9 @@ def main(argv: list[str] | None = None) -> int:
 
     run = commands.add_parser("run", help="Run every trial, skipping what the ledger holds")
     run.add_argument("file", type=Path)
-    run.add_argument("--config", type=Path, default=Path("config.toml"), help="Host settings")
+    run.add_argument(
+        "--config", type=Path, default=None, help="Host settings ($STRATA_CONFIG, else config.toml)"
+    )
     run.add_argument("--set", action="append", default=[], metavar="KEY=VALUE")
     run.set_defaults(run=_run)
 
