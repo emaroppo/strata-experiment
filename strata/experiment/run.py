@@ -34,7 +34,7 @@ class Handles:
     project: Project
     catalog: Catalog
     #: The catalog's local root, whose ``blobs/`` is the cache a materialise
-    #: consults before the backend.
+    #: consults before the backend. docs/adr/0002
     catalog_root: Path
     host: Host | None = None
     on_progress: Any = None
@@ -66,8 +66,7 @@ class TrialResult:
         return sum(1 for r in self.records if r.reused)
 
 
-#: Stage name -> the model its record parses back into, so a reused record
-#: is handed downstream exactly as a fresh one would be.
+#: Stage name -> the model its record parses back into. docs/adr/0037
 RECORDS: dict[str, type[BaseModel]] = {
     "dataset": catalog_stages.DatasetRecord,
     "materialise": catalog_stages.MaterialiseRecord,
@@ -159,9 +158,7 @@ def portable(payload: Any, root: Path) -> Any:
     """``payload`` with every path under ``root`` made relative to it.
 
     A request names directories under the project, and a key has to
-    survive the project moving: the same file beside the same project on
-    another machine is the same experiment, and its ledger should read the
-    same there.
+    survive the project moving. See ``docs/adr/0037``.
     """
     prefix = str(Path(root).resolve()) + os.sep
 
@@ -183,9 +180,8 @@ R = TypeVar("R", bound=BaseModel)
 def _produced[R: BaseModel](produced: dict[str, BaseModel], kind: str, cls: type[R]) -> R:
     """What an upstream stage produced under ``kind``, as the record it must be.
 
-    The kinds are opaque strings to the chain check; here is where a kind
-    meets the record type a request reads fields from, and a mismatch is a
-    wiring error named at the stage rather than an attribute error later.
+    Where an opaque kind meets the record type a request reads fields from.
+    See ``docs/adr/0037``.
     """
     record = produced[kind]
     if not isinstance(record, cls):
@@ -214,9 +210,8 @@ def _request(
     with what upstream produced wired in."""
     project = handles.project
     args = dict(spec.args)
-    # The project's grouping, unless the file says otherwise — including
-    # saying none, since a study may want to split what the project keeps
-    # together
+    # The project's grouping, unless the file says otherwise, including
+    # none. docs/adr/0024
     grouping = {"group_by": project.catalog.group_by or None}
     if spec.use == "dataset":
         # And the split the project says its corpus arrived with, the same way
@@ -249,11 +244,8 @@ def _request(
             if frozen is not None
             else None
         )
-        # The project as configured, varied where the file says: its
-        # parameters are the base, the file's `params` override them key by
-        # key, and a grid key lands on top of both. A file naming another
-        # model than the project's starts from nothing, since the project's
-        # parameters were written for its own.
+        # The project's parameters, the file's `params` over them, a grid
+        # key on top; another model starts from nothing. docs/adr/0037
         model = args.pop("model", project.model.ref)
         own = model == project.model.ref
         params = {**(project.model.params if own else {}), **args.pop("params", {})}

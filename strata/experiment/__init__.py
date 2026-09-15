@@ -3,13 +3,10 @@
 A project is the durable job; an experiment is a file that references one
 and adds variation: an ordered list of stages, each a registered name with
 literal arguments, and a grid of values to vary. The file's canonical JSON
-is hashed, so an experiment has an identity and so does each trial. A
-ledger under the project records every stage that ran, keyed by the hash
-of everything upstream of it, and a stage whose key already has a record
-is not run again.
-
-The stages are the other packages': the orchestrator decides the calls and
-records what came back. It never shells out to a command line.
+is hashed, and a ledger under the project records every stage that ran by
+the hash of everything upstream of it. The stages are the other packages':
+the orchestrator decides the calls and records what came back. See
+``docs/adr/0037``.
 """
 
 from .ledger import Ledger

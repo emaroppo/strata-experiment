@@ -5,11 +5,8 @@ every stage record by its key, and one directory per experiment with one
 per trial, where each stage's record is copied under its position. The key
 is the hash of the canonical spec through that stage, the version of the
 implementation that ran it, the request as it was actually built, and the
-catalog it was built against — so two trials, or two experiments, that
-agree on all of that through a stage share its record, and a stage whose
-key already has one is not run again. Nothing is ever invalidated: a
-changed argument, a changed project, or a rerun upstream changes every key
-after it.
+catalog it was built against. A stage whose key already has a record is
+not run again, and nothing is ever invalidated. See ``docs/adr/0037``.
 """
 
 import json
@@ -60,12 +57,9 @@ def stage_key(
     """The identity of a stage's position: everything upstream, what ran it,
     what it was asked, and where.
 
-    ``request`` is the effective request in portable form. It carries what
-    the project supplied and what upstream produced, so an edit to
-    ``project.toml`` or a rerun upstream moves the key rather than reusing
-    a record made under the old inputs. ``catalog_id`` is the catalog the
-    stages were handed, so a record made against one catalog is never
-    handed to a run over another.
+    ``request`` is the effective request in portable form, carrying what
+    the project supplied and what upstream produced. ``catalog_id`` is the
+    catalog the stages were handed. See ``docs/adr/0037``.
     """
     return content_hash(
         {

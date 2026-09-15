@@ -1,18 +1,12 @@
 """The experiment file, and the hashes that make it an identity.
 
 TOML is what a person edits; canonical JSON is what is hashed. Every
-default is materialised before hashing, so an omitted field and a written
-default agree, and a schema version sits inside the payload so a change to
-what a field means changes the hash even when the text does not.
-
-A trial is the base file plus overrides, applied to the payload before
-validation and hashing — so the hash is taken over the effective config,
-and two trials under different overrides are two identities.
-
-The file names its project by how to find it; the hash covers the
-project's identity instead, bound from the project itself at load. The
-same file beside the same project on another machine is the same
-experiment, whatever path it was reached by.
+default is materialised before hashing, and a schema version sits inside
+the payload so a change to what a field means changes the hash even when
+the text does not. A trial is the base file plus overrides, applied before
+validation and hashing. The file names its project by how to find it; the
+hash covers the project's identity instead, bound at load. See
+``docs/adr/0037``.
 """
 
 import copy
@@ -58,8 +52,8 @@ class Experiment(Strict):
     #: ``projects/`` or a path. Not in the hash.
     project: str
     #: The project's identity, which the hash covers: its name, as
-    #: ``project.toml`` declares it. Bound from the project at load, never
-    #: written in the file.
+    #: ``project.toml`` declares it. Bound at load, never written in the
+    #: file. docs/adr/0037
     project_id: str
     name: str
     stages: list[StageSpec]
@@ -111,8 +105,7 @@ class Experiment(Strict):
         """What stage ``upto`` sees: the project, and every stage through it.
 
         The grid is not in it: a trial's stages already carry their
-        overridden values, and two trials that agree on everything through
-        a stage should share that stage's record.
+        overridden values. See ``docs/adr/0037``.
         """
         return {
             "schema_version": self.schema_version,
@@ -184,8 +177,8 @@ class Trial(Strict):
 def load(path: Path, overrides: dict[str, Any] | None = None) -> Experiment:
     """Read an experiment file, applying ``overrides`` before validation.
 
-    The project the file names is loaded here, for its identity: a file
-    naming a project that cannot be found is refused at load.
+    The project the file names is loaded here, for its identity. See
+    ``docs/adr/0037``.
     """
     with open(path, "rb") as f:
         payload = tomllib.load(f)

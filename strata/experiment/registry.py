@@ -1,14 +1,10 @@
 """Names to stages, and what each is handed from where.
 
-A hand-maintained table rather than an entry-point group: the orchestrator
-imports catalog and modelling regardless, there is no third-party stage,
-and a plugin seam is designed at the third implementation. Readable in one
-place, which is what a config can name.
-
-Each entry says which of a stage's request fields the file supplies and
-which the orchestrator wires in from the project or from an upstream
-record. The chain is checked before anything runs: every kind a stage
-consumes must have been produced by a stage before it.
+A hand-maintained table rather than an entry-point group. Each entry says
+which of a stage's request fields the file supplies and which the
+orchestrator wires in from the project or from an upstream record. The
+chain is checked before anything runs: every kind a stage consumes must
+have been produced by a stage before it. See ``docs/adr/0037``.
 """
 
 from strata.catalog import stages as catalog_stages
@@ -52,9 +48,8 @@ def resolve(name: str) -> tuple[Stage, frozenset[str]]:
 def check(experiment: Experiment) -> None:
     """Refuse a file whose stages cannot follow each other or take what they are given.
 
-    Walks the declared kinds the way a schema is walked through a
-    processing pipeline: a stage consuming a kind nothing before it
-    produced fails here, naming both, rather than an hour in.
+    A stage consuming a kind nothing before it produced fails here, naming
+    both. See ``docs/adr/0037``.
     """
     have: set[str] = set()
     for index, spec in enumerate(experiment.stages):
