@@ -4,10 +4,10 @@ import re
 from pathlib import Path
 
 import pytest
-from strata.project import Project
 
 from strata.catalog import Catalog
 from strata.labels import Choices
+from strata.project import Project
 
 TOY = '''
 import json

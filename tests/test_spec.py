@@ -1,12 +1,12 @@
 """The experiment file: what it refuses, what it hashes, and how a grid expands."""
 
 import pytest
-from strata.project import ProjectError
 
 from strata.experiment import ChainError, ExperimentError, load
 from strata.experiment.registry import check
 from strata.experiment.spec import ExperimentError as _ExperimentError
 from strata.experiment.spec import from_payload
+from strata.project import ProjectError
 
 assert _ExperimentError is ExperimentError
 

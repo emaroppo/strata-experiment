@@ -14,13 +14,13 @@ from pathlib import Path
 from typing import Any, TypeVar
 
 from pydantic import BaseModel
-from strata.project import Project
 
 from strata.catalog import Catalog
 from strata.catalog import stages as catalog_stages
 from strata.modelling import RunStore
 from strata.modelling import stages as modelling_stages
 from strata.modelling.stages import Host
+from strata.project import Project
 
 from .ledger import Ledger, StageRecord, now, stage_key
 from .registry import check, resolve
