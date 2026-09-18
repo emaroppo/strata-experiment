@@ -17,6 +17,7 @@ Depends on `strata-contracts`, `strata-common`, `strata-catalog`,
 
 ```toml
 project = "cats-dogs"          # a project directory: catalog, label set, model
+name = "lr-sweep"              # what its trials are listed and recorded under
 
 [[stage]]
 use = "dataset"                # freeze what is labelled into a version

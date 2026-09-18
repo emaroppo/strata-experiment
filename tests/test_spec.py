@@ -123,6 +123,15 @@ def test_overrides_at_load_are_part_of_the_identity(experiment_file):
 # ----------------------------------------------------------------------
 
 
+def test_a_file_without_a_name_is_refused_saying_what_to_add():
+    # A validation dump names the field and nothing else; this says what it
+    # is for and what one looks like
+    payload = _payload()
+    del payload["name"]
+    with pytest.raises(ExperimentError, match=r'needs `name`.*name = "'):
+        _load(payload)
+
+
 def test_a_stage_without_a_name_is_refused():
     with pytest.raises(ExperimentError, match="needs `use`"):
         _load(_payload(stage=[{"val_ratio": 0.2}]))

@@ -204,6 +204,11 @@ def from_payload(
             "`project_id` is not a key of the file: the identity comes from the project "
             "that `project` names."
         )
+    if not isinstance(payload.get("name"), str) or not payload["name"]:
+        raise ExperimentError(
+            "An experiment file needs `name`, what its trials are listed and recorded "
+            'under: name = "lr-sweep", say.'
+        )
     stages = payload.pop("stage", None)
     if stages is None:
         raise ExperimentError("An experiment file needs at least one [[stage]] table.")
