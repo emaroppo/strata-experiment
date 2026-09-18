@@ -6,8 +6,18 @@ already run for the same inputs is handed downstream rather than run
 again. The top of the strata graph: it sequences every other package's
 stages and nothing imports it.
 
+Not on PyPI: it installs from its repository at a release tag. uv takes a
+git source only for a package named directly, so the strata packages
+beneath it are named beside it.
+
 ```bash
-uv add strata-experiment
+g=git+https://github.com/emaroppo
+uv add "strata-experiment @ $g/strata-experiment@v0.1.0" \
+       "strata-project @ $g/strata-project@v0.1.0"       \
+       "strata-modelling @ $g/strata-modelling@v0.1.0"   \
+       "strata-catalog @ $g/strata-catalog@v0.1.0"       \
+       "strata-contracts @ $g/strata-contracts@v0.1.0"   \
+       "strata-common @ $g/strata-common@v0.1.0"
 ```
 
 Depends on `strata-contracts`, `strata-common`, `strata-catalog`,
@@ -86,7 +96,7 @@ holdout in its `docs/adr/0003`. `docs/adr/NNNN`, wherever this package's code sa
 ## Tests
 
 ```bash
-.github/sibling-wheels.sh contracts common catalog modelling project   # the strata packages this one needs, until they are on an index
+.github/sibling-wheels.sh contracts common catalog modelling project   # the strata packages this one needs, from their repositories
 uv sync --find-links dist --group dev --extra test
 uv run pytest
 ```
