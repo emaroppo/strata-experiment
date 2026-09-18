@@ -8,7 +8,7 @@ requires-python = ">=3.13"
 # on it. The labeller is a peer over the same project, not a dependency.
 dependencies = [
     "pydantic>=2.0",
-    "strata-labels>=0.1,<0.2",
+    "strata-contracts>=0.1,<0.2",
     "strata-common>=0.1,<0.2",
     "strata-catalog>=0.1,<0.2",
     "strata-modelling>=0.1,<0.2",

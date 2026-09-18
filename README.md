@@ -10,7 +10,7 @@ stages and nothing imports it.
 uv add strata-experiment
 ```
 
-Depends on `strata-labels`, `strata-common`, `strata-catalog`,
+Depends on `strata-contracts`, `strata-common`, `strata-catalog`,
 `strata-modelling` and `strata-labeller`. May not know Label Studio exists.
 
 ## An experiment is a file
@@ -85,7 +85,7 @@ holdout in its `docs/adr/0003`. `docs/adr/NNNN`, wherever this package's code sa
 ## Tests
 
 ```bash
-.github/sibling-wheels.sh labels common catalog modelling project   # the strata packages this one needs, until they are on an index
+.github/sibling-wheels.sh contracts common catalog modelling project   # the strata packages this one needs, until they are on an index
 uv sync --find-links dist --group dev --extra test
 uv run pytest
 ```

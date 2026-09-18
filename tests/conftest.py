@@ -6,14 +6,14 @@ from pathlib import Path
 import pytest
 
 from strata.catalog import Catalog
-from strata.labels import Choices
+from strata.contracts import Choices
 from strata.project import Project
 
 TOY = '''
 import json
 from pathlib import Path
 
-from strata.labels import ChoicesPrediction
+from strata.contracts import ChoicesPrediction
 from strata.modelling import Model
 
 
