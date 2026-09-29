@@ -20,7 +20,7 @@ from strata.modelling import Model
 class Toy(Model):
     """Predicts "cat" for everything, so a score is a share of cats."""
 
-    task = "classification"
+    label_type = "classification"
     version = "1"
 
     def __init__(self, lr: float = 0.1, epochs: int = 1):
