@@ -26,12 +26,12 @@ def test_run_reports_each_trial(experiment_file, config_file, capsys):
     assert main(["run", str(experiment_file), "--config", str(config_file)]) == 0
     out = capsys.readouterr().out
     assert out.count("trial ") == 2
-    assert "evaluate     ran" in out and "exact_match=" in out
+    assert "evaluate     ran" in out and "holdout classify: exact_match=" in out
 
     assert main(["--json", "run", str(experiment_file), "--config", str(config_file)]) == 0
     payload = json.loads(capsys.readouterr().out)
     assert [t["reused"] for t in payload] == [5, 5]
-    assert all(t["metrics"]["recall"] > 0.5 for t in payload)
+    assert all(t["metrics"]["classify.recall"] > 0.5 for t in payload)
 
 
 def test_set_overrides_the_file(experiment_file, config_file, capsys):

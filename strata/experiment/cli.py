@@ -82,11 +82,15 @@ def _overrides(pairs: list[str]) -> dict:
 
 
 def _check(args) -> int:
+    from strata.project import Project
+
     from .registry import check
     from .spec import load
+    from .tasks import check_tasks
 
     experiment = load(args.file, _overrides(args.set))
     check(experiment)
+    check_tasks(experiment, Project.load(Path(experiment.project)))
     trials = experiment.trials()
     if args.json:
         print(
@@ -191,8 +195,13 @@ def _summary(record) -> str:
     if record.stage == "train":
         return f"  run {body['run_id']}" + (" (cold)" if not body["parent_run_id"] else "")
     if record.stage == "evaluate":
-        metrics = ", ".join(f"{k}={v:.4f}" for k, v in sorted(body["metrics"].items()))
-        return f"  {body['side']}: {metrics}"
+        scores = body.get("scores") or {"": {"metrics": body.get("metrics", {})}}
+        lines = []
+        for task, score in scores.items():
+            metrics = ", ".join(f"{k}={v:.4f}" for k, v in sorted(score["metrics"].items()))
+            label = f"{body['side']} {task}" if task else body["side"]
+            lines.append(f"  {label}: {metrics}")
+        return "\n".join(lines)
     return ""
 
 

@@ -60,6 +60,30 @@ strata-experiment run   experiment.toml --set train.params.lr=0.01   # override 
 
 `--json` prints the records instead of rendering them.
 
+## What evaluate scores
+
+With no `tasks`, the label type's default: `classify`, or `entities` for
+spans. Otherwise each task is a table naming it with `use`, by name or a
+project's own `file.py:Class`, and every other key is its parameters:
+
+```toml
+[[stage]]
+use = "evaluate"
+on = "holdout"
+tasks = [
+    { use = "entities" },
+    { use = "mask", failures = ["fragmented", "merging", "failures.py:Initials"] },
+]
+```
+
+Each task is resolved and checked against the project's label set before
+the first stage runs, so an unknown task, parameter, class or failure mode
+costs nothing. What resolves goes into the key with the identity of its
+code, the package's version or a file's hash: editing a project's own
+task or failure mode reruns `evaluate` and nothing before it, from cached
+predictions. A trial's metrics read `<task>.<metric>`, and `run` prints one
+line per task.
+
 ## How it is reproducible
 
 **The file hashes, and the hash is the identity.** TOML is what a person

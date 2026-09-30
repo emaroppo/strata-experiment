@@ -25,6 +25,7 @@ from strata.project import Project
 from .ledger import Ledger, StageRecord, now, stage_key
 from .registry import check, resolve
 from .spec import Experiment, ExperimentError, StageSpec, Trial
+from .tasks import check_tasks, task_refs
 
 
 @dataclass
@@ -48,10 +49,21 @@ class TrialResult:
 
     @property
     def metrics(self) -> dict[str, float]:
-        """What the last ``evaluate`` reported, or nothing."""
+        """What the last ``evaluate`` reported, ``<task>.<metric>``, or nothing.
+
+        A record from before tasks has only its classification numbers, and
+        they are read as they were.
+        """
         for record in reversed(self.records):
             if record.stage == "evaluate":
-                return dict(record.record.get("metrics", {}))
+                scores = record.record.get("scores")
+                if not scores:
+                    return dict(record.record.get("metrics", {}))
+                return {
+                    f"{task}.{name}": value
+                    for task, score in scores.items()
+                    for name, value in score.get("metrics", {}).items()
+                }
         return {}
 
     @property
@@ -84,6 +96,7 @@ def run_experiment(
 ) -> list[TrialResult]:
     """Every trial in order, each stage run or reused, everything recorded."""
     check(experiment)
+    check_tasks(experiment, handles.project)
     if experiment.project_id != handles.project.name:
         raise ExperimentError(
             f"The file was loaded for project {experiment.project_id!r} and is being run "
@@ -158,9 +171,12 @@ def portable(payload: Any, root: Path) -> Any:
     """``payload`` with every path under ``root`` made relative to it.
 
     A request names directories under the project, and a key has to
-    survive the project moving. See ``docs/adr/0037``.
+    survive the project moving. See ``docs/adr/0037``. A plugin's identity
+    names its file as ``file:<path>#sha256:…``, and that path is made
+    relative the same way (``docs/adr/0043``).
     """
     prefix = str(Path(root).resolve()) + os.sep
+    marked = f"file:{prefix}"
 
     def walk(value: Any) -> Any:
         if isinstance(value, dict):
@@ -169,6 +185,8 @@ def portable(payload: Any, root: Path) -> Any:
             return [walk(v) for v in value]
         if isinstance(value, str) and value.startswith(prefix):
             return value[len(prefix) :]
+        if isinstance(value, str) and value.startswith(marked):
+            return "file:" + value[len(marked) :]
         return value
 
     return walk(payload)
@@ -265,5 +283,6 @@ def _request(
             run_id=_produced(produced, "run", modelling_stages.TrainRecord).run_id,
             dataset_dir=_materialised(produced),
             side=args.get("on", "holdout"),
+            tasks=task_refs(args.get("tasks"), project),
         )
     raise AssertionError(f"no wiring for {spec.use}: the registry and this table disagree")

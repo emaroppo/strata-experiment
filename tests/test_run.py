@@ -33,8 +33,9 @@ def test_a_grid_runs_every_trial_and_scores_each_on_the_holdout(
         assert result.run_id is not None
         # The toy predicts cat for everything and two in three answers are cat,
         # so every micro figure is the share of cats on the holdout
-        assert result.metrics["exact_match"] > 0.5
-        assert result.metrics["exact_match"] == result.metrics["recall"] == result.metrics["f1"]
+        m = result.metrics
+        assert m["classify.exact_match"] > 0.5
+        assert m["classify.exact_match"] == m["classify.recall"] == m["classify.f1"]
     assert results[0].run_id != results[1].run_id
 
 
@@ -160,3 +161,86 @@ def test_a_file_loaded_for_another_project_is_refused(project, catalog, experime
     experiment = load(experiment_file).model_copy(update={"project_id": "other"})
     with pytest.raises(ExperimentError, match="'other'"):
         run_experiment(experiment, _handles(project, catalog, tmp_path))
+
+
+# ----------------------------------------------------------------------
+# tasks
+# ----------------------------------------------------------------------
+
+CATS = '''
+from strata.evaluation.tasks import Scored, Task
+
+
+class Cats(Task):
+    """The share of samples predicted to be a cat: a project's own question."""
+
+    name = "cats"
+    version = "1"
+    label_type = "classification"
+
+    def score(self, documents, params):
+        cats = sum("cat" in d.prediction.values for d in documents)
+        return Scored(metrics={"share": cats / len(documents) if documents else 0.0})
+'''
+
+
+def _scored_by(experiment_file, tasks: str):
+    text = experiment_file.read_text().replace(
+        'on = "holdout"\n', f'on = "holdout"\ntasks = {tasks}\n'
+    )
+    experiment_file.write_text(text)
+    return load(experiment_file)
+
+
+def test_the_tasks_a_file_names_are_what_evaluate_scores(
+    project, catalog, experiment_file, tmp_path
+):
+    (project.root / "tasks.py").write_text(CATS)
+    experiment = _scored_by(experiment_file, '[{ use = "classify" }, { use = "tasks.py:Cats" }]')
+    [first, _] = run_experiment(experiment, _handles(project, catalog, tmp_path))
+    assert first.metrics["cats.share"] == 1.0
+    assert "classify.exact_match" in first.metrics
+
+
+def test_an_unknown_task_is_refused_before_any_stage_runs(
+    project, catalog, experiment_file, tmp_path
+):
+    from strata.modelling.stages import StageError
+
+    experiment = _scored_by(experiment_file, '[{ use = "clasify" }]')
+    with pytest.raises(StageError, match="No task named 'clasify'"):
+        run_experiment(experiment, _handles(project, catalog, tmp_path))
+    assert not list((project.root / "experiments").rglob("*.json"))
+
+
+def test_a_task_table_with_no_use_is_refused(project, catalog, experiment_file, tmp_path):
+    experiment = _scored_by(experiment_file, '[{ name = "classify" }]')
+    with pytest.raises(ExperimentError, match="names no task"):
+        run_experiment(experiment, _handles(project, catalog, tmp_path))
+
+
+def test_editing_a_projects_task_rescores_and_reruns_nothing_before_it(
+    project, catalog, experiment_file, tmp_path
+):
+    """The file's bytes are its identity, so an edit is a new key for evaluate alone."""
+    (project.root / "tasks.py").write_text(CATS)
+    experiment = _scored_by(experiment_file, '[{ use = "tasks.py:Cats" }]')
+    handles = _handles(project, catalog, tmp_path)
+    run_experiment(experiment, handles)
+
+    (project.root / "tasks.py").write_text(CATS.replace('"share"', '"fraction"'))
+    [again, _] = run_experiment(experiment, handles)
+    assert [r.reused for r in again.records] == [True, True, True, True, False]
+    assert again.metrics == {"cats.fraction": 1.0}
+
+
+def test_a_projects_task_puts_no_path_of_this_machine_in_the_key(
+    project, catalog, experiment_file, tmp_path
+):
+    (project.root / "tasks.py").write_text(CATS)
+    experiment = _scored_by(experiment_file, '[{ use = "tasks.py:Cats" }]')
+    [first, _] = run_experiment(experiment, _handles(project, catalog, tmp_path))
+    [task] = first.records[4].request["tasks"]
+    assert task["ref"] == "tasks.py:Cats"
+    assert task["identities"][0]["source"].startswith("file:tasks.py#sha256:")
+    assert str(project.root) not in json.dumps(first.records[4].request)

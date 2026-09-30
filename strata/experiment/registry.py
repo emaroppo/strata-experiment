@@ -33,7 +33,7 @@ STAGES: dict[str, tuple[Stage, frozenset[str]]] = {
         modelling_stages.STAGES[0],
         frozenset({"model", "params", "fresh_params", "fresh", "parent"}),
     ),
-    "evaluate": (modelling_stages.STAGES[1], frozenset({"on"})),
+    "evaluate": (modelling_stages.STAGES[1], frozenset({"on", "tasks"})),
 }
 assert [s.name for s, _ in STAGES.values()] == list(STAGES), "the table names its own stages"
 
