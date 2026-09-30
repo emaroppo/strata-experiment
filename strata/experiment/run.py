@@ -173,7 +173,7 @@ def portable(payload: Any, root: Path) -> Any:
     A request names directories under the project, and a key has to
     survive the project moving. See ``docs/adr/0037``. A plugin's identity
     names its file as ``file:<path>#sha256:…``, and that path is made
-    relative the same way (``docs/adr/0043``).
+    relative the same way (``docs/adr/0042``).
     """
     prefix = str(Path(root).resolve()) + os.sep
     marked = f"file:{prefix}"

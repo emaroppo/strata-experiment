@@ -15,7 +15,7 @@ the project, as a model's is, and the key is made relative to it again, so
 a project moved keeps its keys. Each task is resolved and checked against
 the project's label set when the file is checked, and the identities found
 go into the request, so a change in the code is a change in the key. See
-``docs/adr/0043``.
+``docs/adr/0042``.
 """
 
 from typing import Any
