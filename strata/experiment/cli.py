@@ -30,6 +30,11 @@ def main(argv: list[str] | None = None) -> int:
     run.add_argument(
         "--config", type=Path, default=None, help="Host settings ($STRATA_CONFIG, else config.toml)"
     )
+    run.add_argument(
+        "--host",
+        default="",
+        help="Which modelling host in config.toml (default: the project's, else the machine's)",
+    )
     run.add_argument("--set", action="append", default=[], metavar="KEY=VALUE")
     run.set_defaults(run=_run)
 
@@ -129,13 +134,14 @@ def _run(args) -> int:
     config = settings.catalogs.named(project.catalog.name)
     catalog = open_catalog(config)
     host = None
-    if settings.modelling.url:
-        if not settings.modelling.token:
+    modelling = settings.modelling.named(args.host or project.model.host)
+    if modelling.url:
+        if not modelling.token:
             raise ValueError(
-                "No token for the modelling host. Set $STRATA_MODELLING_TOKEN to the "
-                "same value it was started with."
+                f"No token for the modelling host {modelling.describe()}. Set "
+                f"{modelling.token_from()} to the same value it was started with."
             )
-        host = Host(settings.modelling.url, settings.modelling.token)
+        host = Host(modelling.url, modelling.token)
     handles = Handles(project=project, catalog=catalog, catalog_root=Path(config.root), host=host)
 
     def say(event, trial, record) -> None:
