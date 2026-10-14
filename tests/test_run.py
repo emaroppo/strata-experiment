@@ -269,3 +269,18 @@ def test_a_pinned_dataset_version_is_scored_whatever_is_labelled_since(
     experiment_file.write_text(pinned)
     [again, _] = run_experiment(load(experiment_file), handles)
     assert (again.records[0].record["version"], again.records[0].record["samples"]) == (1, 30)
+
+
+def test_a_learning_curve_trains_each_trial_on_its_share(
+    project, catalog, experiment_file, tmp_path
+):
+    curve = experiment_file.read_text().replace(
+        '"train.params.lr" = [0.1, 0.5]', '"train.train_fraction" = [0.5, 1.0]'
+    )
+    experiment_file.write_text(curve)
+    results = run_experiment(load(experiment_file), _handles(project, catalog, tmp_path))
+    trained = [r.records[3].record["metrics"] for r in results]
+    half, whole = (m["train_samples"] for m in trained)
+    assert half == -(-whole // 2)
+    # The toy counts what it was given, which is what the handler kept
+    assert [m["n_train"] for m in trained] == [half, whole]

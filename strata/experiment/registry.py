@@ -42,7 +42,9 @@ STAGES: dict[str, tuple[Stage, frozenset[str]]] = {
     ),
     "train": (
         modelling_stages.STAGES[0],
-        frozenset({"model", "params", "fresh_params", "fresh", "parent"}),
+        frozenset(
+            {"model", "params", "fresh_params", "fresh", "parent", "train_fraction", "subset_seed"}
+        ),
     ),
     "evaluate": (modelling_stages.STAGES[1], frozenset({"on", "tasks"})),
 }
