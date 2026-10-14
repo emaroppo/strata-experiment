@@ -244,3 +244,28 @@ def test_a_projects_task_puts_no_path_of_this_machine_in_the_key(
     assert task["ref"] == "tasks.py:Cats"
     assert task["identities"][0]["source"].startswith("file:tasks.py#sha256:")
     assert str(project.root) not in json.dumps(first.records[4].request)
+
+
+def test_a_pinned_dataset_version_is_scored_whatever_is_labelled_since(
+    project, catalog, experiment_file, tmp_path
+):
+    """What a comparison over several files needs: the same messages each time."""
+    from strata.contracts import Choices
+
+    handles = _handles(project, catalog, tmp_path)
+    [first, _] = run_experiment(load(experiment_file), handles)
+    assert first.records[0].record["version"] == 1
+
+    # A new label: unpinned, the next run would freeze version 2
+    raw = tmp_path / "raw" / "late.jpg"
+    raw.write_bytes(b"late image")
+    [late] = catalog.ingest([raw], media="image", collections=project.collections)
+    label_set, _ = catalog.label_sets.get(project.label_set_name)
+    catalog.annotations.annotate_many(label_set, [(late, Choices(values=["cat"]))])
+
+    pinned = experiment_file.read_text().replace(
+        'use = "dataset"\n', 'use = "dataset"\nversion = 1\n'
+    )
+    experiment_file.write_text(pinned)
+    [again, _] = run_experiment(load(experiment_file), handles)
+    assert (again.records[0].record["version"], again.records[0].record["samples"]) == (1, 30)

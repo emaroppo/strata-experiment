@@ -1,9 +1,11 @@
-"""``strata-experiment``: run an experiment file, or check one.
+"""``strata-experiment``: run an experiment file, check one, or report on several.
 
 Standard library only, like the other package commands. ``run`` resolves
 the project and its catalog the way the labeller does, hands them to the
 runner, and prints what each trial reported; ``check`` validates the file,
-expands the grid and prints the trials without running anything.
+expands the grid and prints the trials without running anything;
+``report`` reads what files have already run from the ledger and sets them
+side by side, each row saying which set it was scored on.
 """
 
 import argparse
@@ -40,6 +42,13 @@ def main(argv: list[str] | None = None) -> int:
     )
     run.add_argument("--set", action="append", default=[], metavar="KEY=VALUE")
     run.set_defaults(run=_run)
+
+    report = commands.add_parser(
+        "report", help="Set what experiment files found side by side, from the ledger"
+    )
+    report.add_argument("files", type=Path, nargs="+")
+    report.add_argument("--markdown", action="store_true", help="Print Markdown tables")
+    report.set_defaults(run=_report)
 
     args = parser.parse_args(argv)
     try:
@@ -177,6 +186,33 @@ def _run(args) -> int:
     for r in results:
         metrics = ", ".join(f"{k}={v:.4f}" for k, v in sorted(r.metrics.items()))
         print(f"{r.trial.short_id}  {r.trial.label:<40} {r.run_id or '-':<32} {metrics}")
+    return 0
+
+
+def _report(args) -> int:
+    from . import report
+    from .spec import load
+
+    trials = []
+    for path in args.files:
+        experiment = load(path)
+        trials += report.scored(experiment, report.ledger_for(experiment))
+    table = report.rows(trials)
+    if args.json:
+        print(json.dumps(report.as_json(table), indent=2, sort_keys=True, default=str))
+        return 0
+    if not table:
+        print("Nothing evaluated yet in these files: run them first.")
+        return 0
+    show = report.markdown if args.markdown else report.plain
+    print(show(*report.headline(table)))
+    print()
+    print(
+        "Per class, strict / partial F1:"
+        if not args.markdown
+        else "Per class, strict / partial F1:\n"
+    )
+    print(show(*report.by_class(table)))
     return 0
 
 
