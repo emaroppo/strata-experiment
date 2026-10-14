@@ -195,22 +195,30 @@ def as_json(table: list[Row]) -> list[dict]:
             "approach": row.approach,
             "n": row.n,
             "seeds": [t.seed for t in row.trials],
-            "metrics": {
-                name: dict(zip(("mean", "sd"), row.metric(name), strict=True))
-                for name in sorted({m for t in row.trials for m in t.metrics})
-                if row.metric(name) is not None
-            },
-            "per_class": {
-                label: {
-                    kind: dict(zip(("mean", "sd"), row.per_class(label, kind), strict=True))
-                    for kind in ("f1", "partial_f1")
-                    if row.per_class(label, kind) is not None
+            "metrics": _summaries(
+                {
+                    name: row.metric(name)
+                    for name in sorted({m for t in row.trials for m in t.metrics})
                 }
+            ),
+            "per_class": {
+                label: _summaries(
+                    {kind: row.per_class(label, kind) for kind in ("f1", "partial_f1")}
+                )
                 for label in row.classes
             },
         }
         for row in table
     ]
+
+
+def _summaries(found: dict[str, tuple[float, float | None] | None]) -> dict[str, dict]:
+    """Each (mean, spread) as a mapping, leaving out what no trial reported."""
+    return {
+        name: {"mean": value[0], "sd": value[1]}
+        for name, value in found.items()
+        if value is not None
+    }
 
 
 def ledger_for(experiment: Experiment) -> Ledger:
