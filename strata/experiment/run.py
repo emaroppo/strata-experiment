@@ -15,9 +15,8 @@ from typing import Any, TypeVar
 
 from pydantic import BaseModel
 
-from strata.catalog import Catalog
+from strata.catalog import Catalog, SelectionSpec
 from strata.catalog import stages as catalog_stages
-from strata.catalog.selection import SelectionSpec
 from strata.modelling import RunStore
 from strata.modelling import stages as modelling_stages
 from strata.modelling.stages import Host
