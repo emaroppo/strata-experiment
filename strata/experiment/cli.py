@@ -9,10 +9,11 @@ side by side, each row saying which set it was scored on.
 """
 
 import argparse
-import json
-import sys
 import tomllib
 from pathlib import Path
+
+from strata.common.cli import print_json, run
+from strata.common.errors import Refused
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -27,12 +28,12 @@ def main(argv: list[str] | None = None) -> int:
     check.add_argument("--set", action="append", default=[], metavar="KEY=VALUE")
     check.set_defaults(run=_check)
 
-    run = commands.add_parser("run", help="Run every trial, skipping what the ledger holds")
-    run.add_argument("file", type=Path)
-    run.add_argument(
+    runner = commands.add_parser("run", help="Run every trial, skipping what the ledger holds")
+    runner.add_argument("file", type=Path)
+    runner.add_argument(
         "--config", type=Path, default=None, help="Host settings ($STRATA_CONFIG, else config.toml)"
     )
-    run.add_argument(
+    runner.add_argument(
         "--host",
         default="",
         help=(
@@ -40,8 +41,8 @@ def main(argv: list[str] | None = None) -> int:
             "(default: the project's, else its catalog's, else the machine's)"
         ),
     )
-    run.add_argument("--set", action="append", default=[], metavar="KEY=VALUE")
-    run.set_defaults(run=_run)
+    runner.add_argument("--set", action="append", default=[], metavar="KEY=VALUE")
+    runner.set_defaults(run=_run)
 
     report = commands.add_parser(
         "report", help="Set what experiment files found side by side, from the ledger"
@@ -51,16 +52,11 @@ def main(argv: list[str] | None = None) -> int:
     report.set_defaults(run=_report)
 
     args = parser.parse_args(argv)
-    try:
-        return args.run(args)
-    except Exception as e:
-        if _is_refusal(e):
-            print(str(e), file=sys.stderr)
-            return 1
-        raise
+    return run(lambda: args.run(args), *_refusals())
 
 
-def _is_refusal(error: Exception) -> bool:
+def _refusals() -> tuple[type[Exception], ...]:
+    """What the command stops for with a line on stderr; anything else is a crash."""
     from strata.catalog import CatalogError
     from strata.catalog.config import CatalogConfigError
     from strata.modelling.remote.client import RemoteError
@@ -70,18 +66,14 @@ def _is_refusal(error: Exception) -> bool:
     from .registry import ChainError
     from .spec import ExperimentError
 
-    return isinstance(
-        error,
-        (
-            ExperimentError,
-            ChainError,
-            CatalogError,
-            CatalogConfigError,
-            ProjectError,
-            StageError,
-            RemoteError,
-            ValueError,
-        ),
+    return (
+        ExperimentError,
+        ChainError,
+        CatalogError,
+        CatalogConfigError,
+        ProjectError,
+        StageError,
+        RemoteError,
     )
 
 
@@ -90,7 +82,7 @@ def _overrides(pairs: list[str]) -> dict:
     for pair in pairs:
         key, sep, raw = pair.partition("=")
         if not sep:
-            raise ValueError(f"--set takes KEY=VALUE, got {pair!r}")
+            raise Refused(f"--set takes KEY=VALUE, got {pair!r}")
         try:
             out[key] = tomllib.loads(f"v = {raw}")["v"]
         except tomllib.TOMLDecodeError:
@@ -110,17 +102,13 @@ def _check(args) -> int:
     check_tasks(experiment, Project.load(Path(experiment.project)))
     trials = experiment.trials()
     if args.json:
-        print(
-            json.dumps(
-                {
-                    "id": experiment.id,
-                    "name": experiment.name,
-                    "stages": [s.use for s in experiment.stages],
-                    "trials": [{"id": t.id, "overrides": t.overrides} for t in trials],
-                },
-                indent=2,
-                sort_keys=True,
-            )
+        print_json(
+            {
+                "id": experiment.id,
+                "name": experiment.name,
+                "stages": [s.use for s in experiment.stages],
+                "trials": [{"id": t.id, "overrides": t.overrides} for t in trials],
+            }
         )
         return 0
     print(f"{experiment.name}  {experiment.short_id}")
@@ -149,7 +137,7 @@ def _run(args) -> int:
     modelling = settings.modelling_for(project.catalog.name, args.host or project.model.host)
     if modelling.url:
         if not modelling.token:
-            raise ValueError(
+            raise Refused(
                 f"No token for the modelling host {modelling.describe()}. Set "
                 f"{modelling.token_from()} to the same value it was started with."
             )
@@ -179,7 +167,7 @@ def _run(args) -> int:
             }
             for r in results
         ]
-        print(json.dumps(payload, indent=2, sort_keys=True, default=str))
+        print_json(payload)
         return 0
 
     print()
@@ -199,7 +187,7 @@ def _report(args) -> int:
         trials += report.scored(experiment, report.ledger_for(experiment))
     table = report.rows(trials)
     if args.json:
-        print(json.dumps(report.as_json(table), indent=2, sort_keys=True, default=str))
+        print_json(report.as_json(table))
         return 0
     if not table:
         print("Nothing evaluated yet in these files: run them first.")

@@ -2,6 +2,8 @@
 
 import json
 
+import pytest
+
 from strata.experiment.cli import main
 
 
@@ -59,3 +61,36 @@ def test_the_environment_names_the_config(experiment_file, config_file, capsys, 
     monkeypatch.setenv("STRATA_CONFIG", str(config_file.parent / "absent.toml"))
     assert main(["run", str(experiment_file)]) == 1
     assert "STRATA_CONFIG" in capsys.readouterr().err
+
+
+def test_a_refusal_is_one_line_on_stderr_and_nothing_on_stdout(experiment_file, capsys):
+    broken = experiment_file.read_text().replace('[[stage]]\nuse = "materialise"\n', "")
+    experiment_file.write_text(broken)
+    assert main(["--json", "check", str(experiment_file)]) == 1
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err.count("\n") == 1 and "needs a dataset_dir" in captured.err
+
+
+def test_set_without_a_value_is_a_refusal(experiment_file, capsys):
+    assert main(["check", str(experiment_file), "--set", "train.params.lr"]) == 1
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err == "--set takes KEY=VALUE, got 'train.params.lr'\n"
+
+
+def test_a_value_error_in_the_body_is_a_crash(experiment_file, monkeypatch):
+    def broken(pairs):
+        raise ValueError("a bug, not a refusal")
+
+    monkeypatch.setattr("strata.experiment.cli._overrides", broken)
+    with pytest.raises(ValueError, match="a bug"):
+        main(["check", str(experiment_file)])
+
+
+def test_json_check_is_the_record_whole(experiment_file, capsys):
+    assert main(["--json", "check", str(experiment_file)]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert set(payload) == {"id", "name", "stages", "trials"}
+    assert payload["name"] == "lr"
+    assert all(set(t) == {"id", "overrides"} for t in payload["trials"])
