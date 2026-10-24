@@ -33,6 +33,7 @@ STAGES: dict[str, tuple[Stage, frozenset[str]]] = {
                 "given",
                 "version",
                 "spec",
+                "disagreeing_inputs",
             }
         ),
     ),
