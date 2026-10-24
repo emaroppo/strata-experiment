@@ -284,3 +284,40 @@ def test_a_learning_curve_trains_each_trial_on_its_share(
     assert half == -(-whole // 2)
     # The toy counts what it was given, which is what the handler kept
     assert [m["n_train"] for m in trained] == [half, whole]
+
+
+def test_a_spec_selects_the_version_and_an_edit_to_it_freezes_again(
+    project, catalog, experiment_file, tmp_path
+):
+    """The spec is the project's file, named relative to it, and keyed by what it says."""
+    from sqlalchemy import select
+
+    from strata.catalog.index import tables as t
+
+    with catalog.engine.connect() as conn:
+        checksums = sorted(conn.execute(select(t.sample.c.checksum)).scalars())
+    catalog.lists.put("picked", checksums[:12])
+    catalog.lists.put("picked", checksums[:15])
+    spec = project.root / "specs" / "picked.toml"
+    spec.parent.mkdir()
+
+    def picking(ref: str) -> None:
+        spec.write_text(
+            f'[select]\ntypes = ["image"]\nlabel_set = "{project.label_set_name}"\n\n'
+            f'[select.lists]\ninclude = ["{ref}"]\n'
+        )
+
+    picking("picked@1")
+    experiment_file.write_text(
+        experiment_file.read_text().replace(
+            'use = "dataset"\n', 'use = "dataset"\nspec = "specs/picked.toml"\n'
+        )
+    )
+    handles = _handles(project, catalog, tmp_path)
+    [first, _] = run_experiment(load(experiment_file), handles)
+    assert first.records[0].record["samples"] == 12
+
+    picking("picked@2")
+    [again, _] = run_experiment(load(experiment_file), handles)
+    assert not again.records[0].reused
+    assert again.records[0].record["samples"] == 15

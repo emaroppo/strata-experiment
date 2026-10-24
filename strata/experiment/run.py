@@ -17,6 +17,7 @@ from pydantic import BaseModel
 
 from strata.catalog import Catalog
 from strata.catalog import stages as catalog_stages
+from strata.catalog.selection import SelectionSpec
 from strata.modelling import RunStore
 from strata.modelling import stages as modelling_stages
 from strata.modelling.stages import Host
@@ -122,6 +123,9 @@ def _run_trial(
         stage, _ = resolve(spec.use)
         request = _request(spec, handles, produced, experiment.id)
         asked = portable(request.model_dump(mode="json"), handles.project.root)
+        if isinstance(request, catalog_stages.DatasetRequest) and request.spec is not None:
+            # The key follows what the spec selects, not only where it is
+            asked["spec"] += f"#{SelectionSpec.read(request.spec).spec_hash}"
         key = stage_key(trial.experiment, index, stage.version, asked, catalog_id)
         found = ledger.find(key)
         if found is not None:
@@ -234,6 +238,9 @@ def _request(
     if spec.use == "dataset":
         # And the split the project says its corpus arrived with, the same way
         declared = {**grouping, "given": project.catalog.given_split}
+        if "spec" in args:
+            # A spec is the project's file, wherever the experiment runs from
+            args["spec"] = (project.root / args["spec"]).resolve()
         return catalog_stages.DatasetRequest(
             label_set=project.label_set_name,
             collections=project.collections,

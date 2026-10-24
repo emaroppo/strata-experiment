@@ -32,6 +32,7 @@ STAGES: dict[str, tuple[Stage, frozenset[str]]] = {
                 "inherit",
                 "given",
                 "version",
+                "spec",
             }
         ),
     ),
