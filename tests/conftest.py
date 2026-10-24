@@ -14,10 +14,10 @@ import json
 from pathlib import Path
 
 from strata.contracts import ChoicesPrediction
-from strata.modelling import Model
+from strata.modelling import LabelModel
 
 
-class Toy(Model):
+class Toy(LabelModel):
     """Predicts "cat" for everything, so a score is a share of cats."""
 
     label_type = "classification"
