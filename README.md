@@ -15,13 +15,16 @@ g=git+https://github.com/emaroppo
 uv add "strata-experiment @ $g/strata-experiment@v0.1.0" \
        "strata-project @ $g/strata-project@v0.1.0"       \
        "strata-modelling @ $g/strata-modelling@v0.1.0"   \
+       "strata-evaluation @ $g/strata-evaluation@v0.1.0" \
        "strata-catalog @ $g/strata-catalog@v0.1.0"       \
+       "strata-prepare @ $g/strata-prepare@v0.1.0"       \
        "strata-contracts @ $g/strata-contracts@v0.1.0"   \
        "strata-common @ $g/strata-common@v0.1.0"
 ```
 
 Depends on `strata-contracts`, `strata-common`, `strata-catalog`,
-`strata-modelling` and `strata-labeller`. May not know Label Studio exists.
+`strata-modelling` and `strata-project`. Never `strata-labeller`: the two
+are peers over the project, and it may not know Label Studio exists.
 
 ## An experiment is a file
 
