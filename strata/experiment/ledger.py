@@ -7,6 +7,10 @@ is the hash of the canonical spec through that stage, the version of the
 implementation that ran it, the request as it was actually built, and the
 catalog it was built against. A stage whose key already has a record is
 not run again, and nothing is ever invalidated. See ``docs/adr/0037``.
+
+Beside ``records/``, ``outputs/`` holds what a media model generated to be
+scored, one file per checkpoint named by its content, which an evaluate
+record names rather than holds (``docs/adr/0054``).
 """
 
 import json
@@ -22,6 +26,7 @@ from .spec import Experiment, Trial
 
 EXPERIMENTS_DIR = "experiments"
 RECORDS_DIR = "records"
+OUTPUTS_DIR = "outputs"
 
 
 class StageRecord(BaseModel):
@@ -75,6 +80,7 @@ class Ledger:
     def __init__(self, root: Path):
         self.root = Path(root)
         self.records_dir = self.root / RECORDS_DIR
+        self.outputs_dir = self.root / OUTPUTS_DIR
 
     @classmethod
     def under(cls, project_root: Path) -> "Ledger":

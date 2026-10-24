@@ -84,6 +84,22 @@ task or failure mode reruns `evaluate` and nothing before it, from cached
 predictions. A trial's metrics read `<task>.<metric>`, and `run` prints one
 line per task.
 
+**Every checkpoint a run kept is scored** (record 0054), each on its own,
+and the record says which checkpoint each score belongs to; a trial's
+metrics are the last one's, and `report` sets the checkpoints one under
+the other. `checkpoints = ["epoch-2"]` scores only those named. A media
+model's run is scored by generating one output from each sample's input,
+with its media's task by default (`text-generation`). `settings` is a
+table of generation settings over the model's own defaults, and `seed`
+what each sample's seed is drawn from, with its checksum, so every
+checkpoint is asked with the same seeds. What it generated is kept under
+`experiments/outputs/`, one JSON-lines file per checkpoint, which the
+record names. A train stage continuing from a named `parent` can name
+which of its checkpoints with `parent_checkpoint`.
+
+None of these is in a stage's request unless the file gives it, so a file
+written before them keeps every key its ledger holds.
+
 ## How it is reproducible
 
 **The file hashes, and the hash is the identity.** TOML is what a person

@@ -240,12 +240,22 @@ def _summary(record) -> str:
     if record.stage == "train":
         return f"  run {body['run_id']}" + (" (cold)" if not body["parent_run_id"] else "")
     if record.stage == "evaluate":
-        scores = body.get("scores") or {"": {"metrics": body.get("metrics", {})}}
+        # Each checkpoint's line under the last's, where there were several.
+        # docs/adr/0054
+        checkpoints = body.get("checkpoints") or []
+        scored = (
+            [(c["name"], c["scores"]) for c in checkpoints]
+            if len(checkpoints) > 1
+            else [(None, body.get("scores") or {"": {"metrics": body.get("metrics", {})}})]
+        )
         lines = []
-        for task, score in scores.items():
-            metrics = ", ".join(f"{k}={v:.4f}" for k, v in sorted(score["metrics"].items()))
-            label = f"{body['side']} {task}" if task else body["side"]
-            lines.append(f"  {label}: {metrics}")
+        for checkpoint, scores in scored:
+            for task, score in scores.items():
+                metrics = ", ".join(f"{k}={v:.4f}" for k, v in sorted(score["metrics"].items()))
+                label = f"{body['side']} {task}" if task else body["side"]
+                if checkpoint is not None:
+                    label += f" @{checkpoint}"
+                lines.append(f"  {label}: {metrics}")
         return "\n".join(lines)
     return ""
 

@@ -67,6 +67,28 @@ class TrialResult:
         return {}
 
     @property
+    def by_checkpoint(self) -> dict[str | None, dict[str, float]]:
+        """What the last ``evaluate`` reported at each checkpoint, oldest first, as :attr:`metrics`.
+
+        A record from before checkpoints has one entry, under None. See
+        ``docs/adr/0054``.
+        """
+        for record in reversed(self.records):
+            if record.stage == "evaluate":
+                checkpoints = record.record.get("checkpoints")
+                if not checkpoints:
+                    return {None: self.metrics}
+                return {
+                    c["name"]: {
+                        f"{task}.{name}": value
+                        for task, score in c.get("scores", {}).items()
+                        for name, value in score.get("metrics", {}).items()
+                    }
+                    for c in checkpoints
+                }
+        return {}
+
+    @property
     def run_id(self) -> str | None:
         for record in reversed(self.records):
             if record.stage == "train":
@@ -137,7 +159,7 @@ def _run_trial(
             continue
 
         started = now()
-        record = stage.run(request, _context(spec.use, handles))
+        record = stage.run(request, _context(spec.use, handles, ledger))
         written = StageRecord(
             index=index,
             stage=stage.name,
@@ -155,7 +177,7 @@ def _run_trial(
     return result
 
 
-def _context(name: str, handles: Handles):
+def _context(name: str, handles: Handles, ledger: Ledger):
     if name in ("dataset", "materialise", "split"):
         return catalog_stages.Context(
             handles.catalog,
@@ -167,6 +189,9 @@ def _context(name: str, handles: Handles):
         store=RunStore.local(handles.project.runs_dir),
         host=handles.host,
         on_state=handles.on_state,
+        # What a media model made to be scored, beside the records that
+        # name it. docs/adr/0054
+        outputs=ledger.outputs_dir,
     )
 
 
@@ -285,10 +310,18 @@ def _request(
             **args,
         )
     if spec.use == "evaluate":
+        run = _produced(produced, "run", modelling_stages.TrainRecord)
+        named = args.get("tasks")
+        # What the run's model makes decides what its tasks read. docs/adr/0054
+        media = modelling_stages.makes(run.model) if named is not None else None
+        # The later fields only where the file gives them, so a file that
+        # does not keeps its keys. docs/adr/0037
+        later = {k: args[k] for k in ("checkpoints", "settings", "seed") if k in args}
         return modelling_stages.EvaluateRequest(
-            run_id=_produced(produced, "run", modelling_stages.TrainRecord).run_id,
+            run_id=run.run_id,
             dataset_dir=_materialised(produced),
             side=args.get("on", "holdout"),
-            tasks=task_refs(args.get("tasks"), project),
+            tasks=task_refs(named, project, media),
+            **later,
         )
     raise AssertionError(f"no wiring for {spec.use}: the registry and this table disagree")

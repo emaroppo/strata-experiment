@@ -4,7 +4,9 @@ Reads trials from the ledger without running anything. Trials that differ
 only in a seed are one row: the mean, the spread and how many, since one
 run of a trained model hides how much the next would differ. Every row says
 which set it was scored on — a validation side is a dev number, and says
-so, so it is never read as a held-out one.
+so, so it is never read as a held-out one. A run scored at several
+checkpoints is a row per checkpoint, one under the other, so an epoch's
+numbers are read beside the next one's (``docs/adr/0054``).
 """
 
 import statistics
@@ -14,7 +16,8 @@ from pathlib import Path
 from .ledger import Ledger, StageRecord
 from .spec import Experiment
 
-#: The headline numbers, as (column, task, metric).
+#: The headline numbers, as (column, task, metric). A column no row reports
+#: is left out of the table.
 HEADLINE = [
     ("F1", "entities", "f1"),
     ("partial F1", "entities", "partial_f1"),
@@ -22,6 +25,10 @@ HEADLINE = [
     ("fragmented", "mask", "fragmented"),
     ("merging", "mask", "merging"),
     ("char recall", "mask", "char_recall"),
+    ("ended", "text-generation", "ended"),
+    ("distinct-2", "text-generation", "distinct_2"),
+    ("longest run p90", "text-generation", "longest_run_p90"),
+    ("chrF", "text-generation", "chrf"),
 ]
 
 
@@ -40,6 +47,9 @@ class Scored:
     metrics: dict[str, float]
     #: class -> {"f1": strict, "partial_f1": partial}
     per_class: dict[str, dict[str, float]]
+    #: Which of the run's checkpoints these are; None on a record from
+    #: before checkpoints.
+    checkpoint: str | None = None
 
     @property
     def set_label(self) -> str:
@@ -54,6 +64,7 @@ class Row:
 
     set_label: str
     approach: str
+    checkpoint: str | None = None
     trials: list[Scored] = field(default_factory=list)
 
     @property
@@ -87,11 +98,14 @@ def scored(experiment: Experiment, ledger: Ledger) -> list[Scored]:
         records = {r.stage: r for r in ledger.records(experiment, trial)}
         if "evaluate" not in records or "dataset" not in records:
             continue
-        found.append(_scored(experiment, trial.overrides, records))
+        found += _scored(experiment, trial.overrides, records)
     return found
 
 
-def _scored(experiment: Experiment, overrides: dict, records: dict[str, StageRecord]) -> Scored:
+def _scored(
+    experiment: Experiment, overrides: dict, records: dict[str, StageRecord]
+) -> list[Scored]:
+    """One trial's evaluation, one per checkpoint it scored, oldest first."""
     dataset = records["dataset"].record
     evaluated = records["evaluate"].record
     train = records["train"].request if "train" in records else {}
@@ -100,38 +114,57 @@ def _scored(experiment: Experiment, overrides: dict, records: dict[str, StageRec
     approach = experiment.name + "".join(
         f"  {k.rsplit('.', 1)[-1]}={v}" for k, v in sorted(distinguishing.items())
     )
-    metrics: dict[str, float] = {}
-    per_class: dict[str, dict[str, float]] = {}
-    for task, score in (evaluated.get("scores") or {}).items():
-        for name, value in (score.get("metrics") or {}).items():
-            metrics[f"{task}.{name}"] = value
-        if task == "entities":
-            for label, values in (score.get("per_class") or {}).items():
-                per_class[label] = {
-                    "f1": values.get("f1"),
-                    "partial_f1": values.get("partial_f1"),
-                }
-    return Scored(
-        experiment=experiment.name,
-        approach=approach,
-        model=str(train.get("model", "")),
-        seed=params.get("seed"),
-        dataset=dataset["name"],
-        version=dataset["version"],
-        side=evaluated["side"],
-        samples=evaluated["samples"],
-        metrics=metrics,
-        per_class=per_class,
-    )
+    # A record from before checkpoints scored the run's last, and says no more
+    checkpoints = evaluated.get("checkpoints") or [
+        {"name": None, "scores": evaluated.get("scores") or {}}
+    ]
+    found = []
+    for checkpoint in checkpoints:
+        metrics: dict[str, float] = {}
+        per_class: dict[str, dict[str, float]] = {}
+        for task, score in (checkpoint.get("scores") or {}).items():
+            for name, value in (score.get("metrics") or {}).items():
+                metrics[f"{task}.{name}"] = value
+            if task == "entities":
+                for label, values in (score.get("per_class") or {}).items():
+                    per_class[label] = {
+                        "f1": values.get("f1"),
+                        "partial_f1": values.get("partial_f1"),
+                    }
+        found.append(
+            Scored(
+                experiment=experiment.name,
+                approach=approach,
+                model=str(train.get("model", "")),
+                seed=params.get("seed"),
+                dataset=dataset["name"],
+                version=dataset["version"],
+                side=evaluated["side"],
+                samples=evaluated["samples"],
+                metrics=metrics,
+                per_class=per_class,
+                checkpoint=checkpoint.get("name"),
+            )
+        )
+    return found
 
 
 def rows(trials: list[Scored]) -> list[Row]:
-    """Trials grouped by set and approach, in the order first seen."""
-    grouped: dict[tuple[str, str], Row] = {}
+    """Trials grouped by set, approach and checkpoint, in the order first seen."""
+    grouped: dict[tuple[str, str, str | None], Row] = {}
     for trial in trials:
-        key = (trial.set_label, trial.approach)
-        grouped.setdefault(key, Row(trial.set_label, trial.approach)).trials.append(trial)
+        key = (trial.set_label, trial.approach, trial.checkpoint)
+        grouped.setdefault(key, Row(*key)).trials.append(trial)
     return list(grouped.values())
+
+
+def _named(table: list[Row]) -> bool:
+    """Whether any row says its checkpoint, and the tables need a column for it."""
+    return any(row.checkpoint is not None for row in table)
+
+
+def _which(row: Row, named: bool) -> list[str]:
+    return [row.set_label, row.approach, *([row.checkpoint or "-"] if named else [])]
 
 
 def _cell(value: tuple[float, float | None] | None) -> str:
@@ -142,14 +175,16 @@ def _cell(value: tuple[float, float | None] | None) -> str:
 
 
 def headline(table: list[Row]) -> tuple[list[str], list[list[str]]]:
-    header = ["set", "approach", "n", *(name for name, _, _ in HEADLINE)]
+    named = _named(table)
+    columns = [
+        (name, f"{task}.{metric}")
+        for name, task, metric in HEADLINE
+        if any(row.metric(f"{task}.{metric}") is not None for row in table)
+    ]
+    header = ["set", "approach", *(["checkpoint"] if named else []), "n"]
+    header += [name for name, _ in columns]
     body = [
-        [
-            row.set_label,
-            row.approach,
-            str(row.n),
-            *(_cell(row.metric(f"{task}.{metric}")) for _, task, metric in HEADLINE),
-        ]
+        [*_which(row, named), str(row.n), *(_cell(row.metric(key)) for _, key in columns)]
         for row in table
     ]
     return header, body
@@ -158,7 +193,8 @@ def headline(table: list[Row]) -> tuple[list[str], list[list[str]]]:
 def by_class(table: list[Row]) -> tuple[list[str], list[list[str]]]:
     """Strict and partial F1 per class, one cell each as "strict / partial"."""
     classes = sorted({c for row in table for c in row.classes})
-    header = ["set", "approach", *classes]
+    named = _named(table)
+    header = ["set", "approach", *(["checkpoint"] if named else []), *classes]
     body = []
     for row in table:
         cells = []
@@ -167,7 +203,7 @@ def by_class(table: list[Row]) -> tuple[list[str], list[list[str]]]:
             cells.append(
                 "-" if strict is None else f"{strict[0]:.2f} / {partial[0] if partial else 0:.2f}"
             )
-        body.append([row.set_label, row.approach, *cells])
+        body.append([*_which(row, named), *cells])
     return header, body
 
 
@@ -193,6 +229,7 @@ def as_json(table: list[Row]) -> list[dict]:
         {
             "set": row.set_label,
             "approach": row.approach,
+            "checkpoint": row.checkpoint,
             "n": row.n,
             "seeds": [t.seed for t in row.trials],
             "metrics": _summaries(
