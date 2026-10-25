@@ -1,12 +1,7 @@
 """The experiment file, and the hashes that make it an identity.
 
-TOML is what a person edits; canonical JSON is what is hashed. Every
-default is materialised before hashing, and a schema version sits inside
-the payload so a change to what a field means changes the hash even when
-the text does not. A trial is the base file plus overrides, applied before
-validation and hashing. The file names its project by how to find it; the
-hash covers the project's identity instead, bound at load. See
-``docs/adr/0037``.
+TOML is edited, canonical JSON with every default and a schema version is
+hashed; a trial is the file plus overrides. See ``docs/adr/0037``.
 """
 
 import copy
@@ -18,6 +13,7 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from strata.common.canonical import content_hash, short_hash
+from strata.project import Project
 
 SCHEMA_VERSION = 1
 
@@ -48,17 +44,14 @@ class Experiment(Strict):
     """One named, reproducible sequence over a project, with its variation."""
 
     schema_version: int = SCHEMA_VERSION
-    #: How to find the project, as the file wrote it: a name under
-    #: ``projects/`` or a path. Not in the hash.
+    #: How to find the project, as the file wrote it; not in the hash.
     project: str
-    #: The project's identity, which the hash covers: its name, as
-    #: ``project.toml`` declares it. Bound at load, never written in the
-    #: file. docs/adr/0037
+    #: The project's declared name, bound at load and covered by the hash (docs/adr/0037).
     project_id: str
     name: str
     stages: list[StageSpec]
-    #: ``"<stage>.<dotted.key>"`` to the values it takes, one trial per
-    #: combination. Empty means one trial: the file as written.
+    #: ``"<stage>.<dotted.key>"`` to the values it takes, one trial per combination; empty is the
+    #: file as written.
     grid: dict[str, list[Any]] = Field(default_factory=dict)
 
     @model_validator(mode="after")
@@ -84,11 +77,7 @@ class Experiment(Strict):
         return self
 
     def canonical(self) -> dict[str, Any]:
-        """The form that gets hashed: every default materialised, nothing implied.
-
-        The project is in it by identity, not by the path the file used to
-        find it.
-        """
+        """The form that gets hashed: every default materialised, the project by identity."""
         payload = self.model_dump(mode="python")
         payload.pop("project")
         return payload
@@ -102,10 +91,8 @@ class Experiment(Strict):
         return short_hash(self.canonical(), 12)
 
     def prefix(self, upto: int) -> dict[str, Any]:
-        """What stage ``upto`` sees: the project, and every stage through it.
-
-        The grid is not in it: a trial's stages already carry their
-        overridden values. See ``docs/adr/0037``.
+        """What stage ``upto`` sees: the project and every stage through it, grid excluded. See
+        ``docs/adr/0037``.
         """
         return {
             "schema_version": self.schema_version,
@@ -130,12 +117,10 @@ class Experiment(Strict):
     def with_overrides(self, overrides: dict[str, Any], keep_grid: bool = False) -> "Experiment":
         """This file with each ``stage.dotted.key`` set.
 
-        A trial drops the grid, since its values are now written in. An
-        override given at load keeps it, since the grid is still to expand —
-        minus any key the override pins, because a value said outright
-        beats a list of candidates for it.
+        ``keep_grid`` keeps the grid minus the keys the overrides pin, for an override given at
+        load.
         """
-        # Deep, or two trials would write into one nested dict and share it
+        # Deep, or two trials would share one nested dict.
         stages = [copy.deepcopy(s.args) for s in self.stages]
         names = [s.use for s in self.stages]
         for key, value in overrides.items():
@@ -175,10 +160,10 @@ class Trial(Strict):
 
 
 def load(path: Path, overrides: dict[str, Any] | None = None) -> Experiment:
-    """Read an experiment file, applying ``overrides`` before validation.
+    """Read an experiment file, applying ``overrides`` before validation; the project is loaded for
+    its identity.
 
-    The project the file names is loaded here, for its identity. See
-    ``docs/adr/0037``.
+    See ``docs/adr/0037``.
     """
     with open(path, "rb") as f:
         payload = tomllib.load(f)
@@ -190,8 +175,6 @@ def load(path: Path, overrides: dict[str, Any] | None = None) -> Experiment:
 
 def identity_of(locator: str) -> str:
     """The identity of the project ``locator`` finds: its declared name."""
-    from strata.project import Project
-
     return Project.load(Path(locator)).name
 
 

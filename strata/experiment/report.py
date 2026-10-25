@@ -1,12 +1,7 @@
-"""What experiments found, side by side, and on what.
+"""What experiments found, side by side, and on what, read from the ledger.
 
-Reads trials from the ledger without running anything. Trials that differ
-only in a seed are one row: the mean, the spread and how many, since one
-run of a trained model hides how much the next would differ. Every row says
-which set it was scored on — a validation side is a dev number, and says
-so, so it is never read as a held-out one. A run scored at several
-checkpoints is a row per checkpoint, one under the other, so an epoch's
-numbers are read beside the next one's (``docs/adr/0054``).
+Trials differing only in seed are one row of mean and spread; a validation
+side says it is a dev number; a row per checkpoint. See ``docs/adr/0054``.
 """
 
 import statistics
@@ -16,8 +11,7 @@ from pathlib import Path
 from .ledger import Ledger, StageRecord
 from .spec import Experiment
 
-#: The headline numbers, as (column, task, metric). A column no row reports
-#: is left out of the table.
+#: The headline numbers, as (column, task, metric); a column no row reports is left out.
 HEADLINE = [
     ("F1", "entities", "f1"),
     ("partial F1", "entities", "partial_f1"),
@@ -47,8 +41,7 @@ class Scored:
     metrics: dict[str, float]
     #: class -> {"f1": strict, "partial_f1": partial}
     per_class: dict[str, dict[str, float]]
-    #: Which of the run's checkpoints these are; None on a record from
-    #: before checkpoints.
+    #: Which of the run's checkpoints these are; None on a record from before checkpoints.
     checkpoint: str | None = None
 
     @property
@@ -114,7 +107,7 @@ def _scored(
     approach = experiment.name + "".join(
         f"  {k.rsplit('.', 1)[-1]}={v}" for k, v in sorted(distinguishing.items())
     )
-    # A record from before checkpoints scored the run's last, and says no more
+    # A record from before checkpoints scored the run's last.
     checkpoints = evaluated.get("checkpoints") or [
         {"name": None, "scores": evaluated.get("scores") or {}}
     ]

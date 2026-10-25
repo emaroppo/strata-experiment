@@ -1,10 +1,7 @@
-"""Names to stages, and what each is handed from where.
+"""Names to stages, and which request fields the file may set; the chain is checked before anything
+runs.
 
-A hand-maintained table rather than an entry-point group. Each entry says
-which of a stage's request fields the file supplies and which the
-orchestrator wires in from the project or from an upstream record. The
-chain is checked before anything runs: every kind a stage consumes must
-have been produced by a stage before it. See ``docs/adr/0037``.
+See ``docs/adr/0037``.
 """
 
 from strata.catalog import stages as catalog_stages
@@ -73,10 +70,8 @@ def resolve(name: str) -> tuple[Stage, frozenset[str]]:
 
 
 def check(experiment: Experiment) -> None:
-    """Refuse a file whose stages cannot follow each other or take what they are given.
-
-    A stage consuming a kind nothing before it produced fails here, naming
-    both. See ``docs/adr/0037``.
+    """Refuse a file whose stages cannot follow each other or take what they are given. See
+    ``docs/adr/0037``.
     """
     have: set[str] = set()
     for index, spec in enumerate(experiment.stages):

@@ -1,14 +1,11 @@
-"""Running an experiment: deciding the calls, and recording what came back.
+"""Running an experiment: building each stage's request, reusing the ledger's record under its key
+or running and recording.
 
-For each trial, for each stage: the request is built — the file's
-arguments, the project's declarations, and what upstream stages produced —
-and the key is computed from the spec through that stage, the request, and
-the catalog in use. If the ledger holds a record under the key it is
-reused; otherwise the stage runs and the record is written. Nothing here
-trains or freezes anything itself.
+See ``docs/adr/0037``.
 """
 
 import os
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, TypeVar
@@ -34,12 +31,16 @@ class Handles:
 
     project: Project
     catalog: Catalog
-    #: The catalog's local root, whose ``blobs/`` is the cache a materialise
-    #: consults before the backend. docs/adr/0002
+    #: The catalog's local root, whose ``blobs/`` is the materialise cache (docs/adr/0002).
     catalog_root: Path
     host: Host | None = None
-    on_progress: Any = None
-    on_state: Any = None
+    #: ``on_progress(done, total)`` as a catalog stage fetches blobs.
+    on_progress: Callable[[int, int], None] | None = None
+    #: A remote job's state as a modelling stage polls it.
+    on_state: Callable[[dict], None] | None = None
+    #: ``on_epoch(done, total, metrics)`` as a model trains here, the modelling stage's
+    #: ``EpochReport``; it may answer True to ask the model to stop.
+    on_epoch: Callable[[int, int, dict[str, float]], bool | None] | None = None
 
 
 @dataclass
@@ -49,10 +50,8 @@ class TrialResult:
 
     @property
     def metrics(self) -> dict[str, float]:
-        """What the last ``evaluate`` reported, ``<task>.<metric>``, or nothing.
-
-        A record from before tasks has only its classification numbers, and
-        they are read as they were.
+        """What the last ``evaluate`` reported, ``<task>.<metric>``, or nothing; a record from
+        before tasks as it was.
         """
         for record in reversed(self.records):
             if record.stage == "evaluate":
@@ -68,10 +67,10 @@ class TrialResult:
 
     @property
     def by_checkpoint(self) -> dict[str | None, dict[str, float]]:
-        """What the last ``evaluate`` reported at each checkpoint, oldest first, as :attr:`metrics`.
+        """What the last ``evaluate`` reported at each checkpoint, oldest first; one entry under
+        None before checkpoints.
 
-        A record from before checkpoints has one entry, under None. See
-        ``docs/adr/0054``.
+        See ``docs/adr/0054``.
         """
         for record in reversed(self.records):
             if record.stage == "evaluate":
@@ -145,7 +144,7 @@ def _run_trial(
         request = _request(spec, handles, produced, experiment.id)
         asked = portable(request.model_dump(mode="json"), handles.project.root)
         if isinstance(request, catalog_stages.DatasetRequest) and request.spec is not None:
-            # The key follows what the spec selects, not only where it is
+            # The key follows what the spec selects, not only where it is. docs/adr/0050
             asked["spec"] += f"#{SelectionSpec.read(request.spec).spec_hash}"
         key = stage_key(trial.experiment, index, stage.version, asked, catalog_id)
         found = ledger.find(key)
@@ -188,20 +187,18 @@ def _context(name: str, handles: Handles, ledger: Ledger):
     return modelling_stages.Context(
         store=RunStore.local(handles.project.runs_dir),
         host=handles.host,
+        on_epoch=handles.on_epoch,
         on_state=handles.on_state,
-        # What a media model made to be scored, beside the records that
-        # name it. docs/adr/0054
+        # docs/adr/0054
         outputs=ledger.outputs_dir,
     )
 
 
 def portable(payload: Any, root: Path) -> Any:
-    """``payload`` with every path under ``root`` made relative to it.
+    """``payload`` with every path under ``root``, plain or in a ``file:`` identity, made relative
+    to it.
 
-    A request names directories under the project, and a key has to
-    survive the project moving. See ``docs/adr/0037``. A plugin's identity
-    names its file as ``file:<path>#sha256:…``, and that path is made
-    relative the same way (``docs/adr/0042``).
+    See ``docs/adr/0037`` and ``docs/adr/0042``.
     """
     prefix = str(Path(root).resolve()) + os.sep
     marked = f"file:{prefix}"
@@ -224,10 +221,8 @@ R = TypeVar("R", bound=BaseModel)
 
 
 def _produced[R: BaseModel](produced: dict[str, BaseModel], kind: str, cls: type[R]) -> R:
-    """What an upstream stage produced under ``kind``, as the record it must be.
-
-    Where an opaque kind meets the record type a request reads fields from.
-    See ``docs/adr/0037``.
+    """What an upstream stage produced under ``kind``, as the record it must be. See
+    ``docs/adr/0037``.
     """
     record = produced[kind]
     if not isinstance(record, cls):
@@ -252,18 +247,17 @@ def _frozen(produced: dict[str, BaseModel]):
 def _request(
     spec: StageSpec, handles: Handles, produced: dict[str, BaseModel], experiment_id: str
 ) -> BaseModel:
-    """The stage's request: the file's arguments over the project's declarations,
-    with what upstream produced wired in."""
+    """The stage's request: the file's arguments over the project's declarations, with what upstream
+    produced.
+    """
     project = handles.project
     args = dict(spec.args)
-    # The project's grouping, unless the file says otherwise, including
-    # none. docs/adr/0024
+    # The project's grouping unless the file says otherwise, including none. docs/adr/0024
     grouping = {"group_by": project.catalog.group_by or None}
     if spec.use == "dataset":
-        # And the split the project says its corpus arrived with, the same way
         declared = {**grouping, "given": project.catalog.given_split}
         if "spec" in args:
-            # A spec is the project's file, wherever the experiment runs from
+            # Anchored at the project, wherever the experiment runs from.
             args["spec"] = (project.root / args["spec"]).resolve()
         return catalog_stages.DatasetRequest(
             label_set=project.label_set_name,
@@ -293,8 +287,7 @@ def _request(
             if frozen is not None
             else None
         )
-        # The project's parameters, the file's `params` over them, a grid
-        # key on top; another model starts from nothing. docs/adr/0037
+        # The file's params over the project's; another model starts from nothing. docs/adr/0037
         model = args.pop("model", project.model.ref)
         own = model == project.model.ref
         params = {**(project.model.params if own else {}), **args.pop("params", {})}
@@ -312,10 +305,9 @@ def _request(
     if spec.use == "evaluate":
         run = _produced(produced, "run", modelling_stages.TrainRecord)
         named = args.get("tasks")
-        # What the run's model makes decides what its tasks read. docs/adr/0054
+        # docs/adr/0054
         media = modelling_stages.makes(run.model) if named is not None else None
-        # The later fields only where the file gives them, so a file that
-        # does not keeps its keys. docs/adr/0037
+        # Later fields only where the file gives them, so older keys hold. docs/adr/0037
         later = {k: args[k] for k in ("checkpoints", "settings", "seed") if k in args}
         return modelling_stages.EvaluateRequest(
             run_id=run.run_id,

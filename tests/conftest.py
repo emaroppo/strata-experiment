@@ -85,11 +85,28 @@ def catalog(project, tmp_path) -> Catalog:
 
 
 @pytest.fixture
-def experiment_file(project, tmp_path) -> Path:
-    path = tmp_path / "experiment.toml"
-    path.write_text(f'''
+def write_experiment(tmp_path):
+    """Writes an experiment file over a project: every stage once, ``train`` fresh, with what a
+    test adds under ``train`` and ``evaluate`` and as its ``[grid]``.
+    """
+
+    def _write(
+        project: Project,
+        name: str,
+        *,
+        train: str = "",
+        evaluate: str = "",
+        grid: str = "",
+        filename: str = "experiment.toml",
+    ) -> Path:
+        def block(lines: str) -> str:
+            return f"{lines.rstrip()}\n" if lines.strip() else ""
+
+        path = tmp_path / filename
+        path.write_text(
+            f'''
 project = "{project.root}"
-name = "lr"
+name = "{name}"
 
 [[stage]]
 use = "dataset"
@@ -105,16 +122,24 @@ use = "split"
 [[stage]]
 use = "train"
 fresh = true
-params = {{ lr = 0.1 }}
-
+{block(train)}
 [[stage]]
 use = "evaluate"
 on = "holdout"
+{block(evaluate)}'''
+            + (f"\n[grid]\n{block(grid)}" if grid.strip() else "")
+        )
+        return path
 
-[grid]
-"train.params.lr" = [0.1, 0.5]
-''')
-    return path
+    return _write
+
+
+@pytest.fixture
+def experiment_file(project, write_experiment) -> Path:
+    """A learning-rate grid of two over the toy model."""
+    return write_experiment(
+        project, "lr", train="params = { lr = 0.1 }", grid='"train.params.lr" = [0.1, 0.5]'
+    )
 
 
 @pytest.fixture

@@ -1,16 +1,7 @@
-"""What ran, written down where a person reads it as often as a program does.
+"""What ran, under the project's ``experiments/``: ``records/`` by key, a directory per experiment
+and trial, ``outputs/`` for generated media.
 
-Under the project's ``experiments/``: one ``records/`` directory holding
-every stage record by its key, and one directory per experiment with one
-per trial, where each stage's record is copied under its position. The key
-is the hash of the canonical spec through that stage, the version of the
-implementation that ran it, the request as it was actually built, and the
-catalog it was built against. A stage whose key already has a record is
-not run again, and nothing is ever invalidated. See ``docs/adr/0037``.
-
-Beside ``records/``, ``outputs/`` holds what a media model generated to be
-scored, one file per checkpoint named by its content, which an evaluate
-record names rather than holds (``docs/adr/0054``).
+See ``docs/adr/0037`` and ``docs/adr/0054``.
 """
 
 import json
@@ -43,8 +34,8 @@ class StageRecord(BaseModel):
     record: dict[str, Any]
     started: datetime
     finished: datetime
-    #: True in a trial's copy when the trial found the record rather than
-    #: made it. Never true in ``records/``, which holds the original.
+    #: True in a trial's copy when the trial found the record rather than made it; never in
+    #: ``records/``.
     reused: bool = False
 
 
@@ -59,12 +50,10 @@ class TrialRecord(BaseModel):
 def stage_key(
     experiment: Experiment, index: int, version: str, request: dict, catalog_id: str | None
 ) -> str:
-    """The identity of a stage's position: everything upstream, what ran it,
-    what it was asked, and where.
+    """The identity of a stage's position: everything upstream, what ran it, the portable request,
+    and the catalog.
 
-    ``request`` is the effective request in portable form, carrying what
-    the project supplied and what upstream produced. ``catalog_id`` is the
-    catalog the stages were handed. See ``docs/adr/0037``.
+    See ``docs/adr/0037``.
     """
     return content_hash(
         {

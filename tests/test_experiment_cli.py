@@ -94,3 +94,43 @@ def test_json_check_is_the_record_whole(experiment_file, capsys):
     assert set(payload) == {"id", "name", "stages", "trials"}
     assert payload["name"] == "lr"
     assert all(set(t) == {"id", "overrides"} for t in payload["trials"])
+
+
+def test_run_hands_the_stages_something_to_report_progress_to(
+    experiment_file, config_file, monkeypatch, capsys
+):
+    """The catalog's fetching, a model's epochs and a remote job's state each reach the terminal
+    through the handles (``docs/adr/0031``).
+    """
+    handed = {}
+
+    def fake(experiment, handles, ledger=None, on_event=None):
+        handed["handles"] = handles
+        return []
+
+    monkeypatch.setattr("strata.experiment.cli.run_experiment", fake)
+    assert main(["--json", "run", str(experiment_file), "--config", str(config_file)]) == 0
+    assert json.loads(capsys.readouterr().out) == []
+    handles = handed["handles"]
+    assert handles.on_progress is not None
+    assert handles.on_state is not None
+    assert handles.on_epoch is not None
+
+
+def test_the_ticker_draws_on_a_terminal_only(monkeypatch, capsys):
+    from strata.experiment.cli import _ticker
+
+    show, done = _ticker("running")
+    show("materialising 1/2")
+    done()
+    assert capsys.readouterr() == ("", "")
+
+    monkeypatch.setattr("sys.stderr.isatty", lambda: True)
+    show, done = _ticker("running")
+    show("materialising 1/2")
+    show("epoch 1/3")
+    done()
+    done()
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err == "\rrunning materialising 1/2\rrunning epoch 1/3\n"

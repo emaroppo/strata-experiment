@@ -1,19 +1,25 @@
-"""``strata-experiment``: run an experiment file, check one, or report on several.
-
-Standard library only, like the other package commands. ``run`` resolves
-the project and its catalog the way the labeller does, hands them to the
-runner, and prints what each trial reported; ``check`` validates the file,
-expands the grid and prints the trials without running anything;
-``report`` reads what files have already run from the ledger and sets them
-side by side, each row saying which set it was scored on.
+"""``strata-experiment``: run an experiment file, check one, or report on several. See
+``docs/adr/0030``.
 """
 
 import argparse
+import sys
 import tomllib
 from pathlib import Path
 
+from strata.catalog import CatalogError
+from strata.catalog.config import CatalogConfigError, open_catalog
 from strata.common.cli import print_json, run
 from strata.common.errors import Refused
+from strata.modelling.remote.client import RemoteError
+from strata.modelling.stages import Host, StageError
+from strata.project import Project, ProjectError, Settings
+
+from . import report
+from .registry import ChainError, check
+from .run import Handles, run_experiment
+from .spec import ExperimentError, load
+from .tasks import check_tasks
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -23,10 +29,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--json", action="store_true", help="Print the records as JSON")
     commands = parser.add_subparsers(dest="command", required=True)
 
-    check = commands.add_parser("check", help="Validate the file and list its trials")
-    check.add_argument("file", type=Path)
-    check.add_argument("--set", action="append", default=[], metavar="KEY=VALUE")
-    check.set_defaults(run=_check)
+    checker = commands.add_parser("check", help="Validate the file and list its trials")
+    checker.add_argument("file", type=Path)
+    checker.add_argument("--set", action="append", default=[], metavar="KEY=VALUE")
+    checker.set_defaults(run=_check)
 
     runner = commands.add_parser("run", help="Run every trial, skipping what the ledger holds")
     runner.add_argument("file", type=Path)
@@ -44,12 +50,12 @@ def main(argv: list[str] | None = None) -> int:
     runner.add_argument("--set", action="append", default=[], metavar="KEY=VALUE")
     runner.set_defaults(run=_run)
 
-    report = commands.add_parser(
+    reporter = commands.add_parser(
         "report", help="Set what experiment files found side by side, from the ledger"
     )
-    report.add_argument("files", type=Path, nargs="+")
-    report.add_argument("--markdown", action="store_true", help="Print Markdown tables")
-    report.set_defaults(run=_report)
+    reporter.add_argument("files", type=Path, nargs="+")
+    reporter.add_argument("--markdown", action="store_true", help="Print Markdown tables")
+    reporter.set_defaults(run=_report)
 
     args = parser.parse_args(argv)
     return run(lambda: args.run(args), *_refusals())
@@ -57,15 +63,6 @@ def main(argv: list[str] | None = None) -> int:
 
 def _refusals() -> tuple[type[Exception], ...]:
     """What the command stops for with a line on stderr; anything else is a crash."""
-    from strata.catalog import CatalogError
-    from strata.catalog.config import CatalogConfigError
-    from strata.modelling.remote.client import RemoteError
-    from strata.modelling.stages import StageError
-    from strata.project import ProjectError
-
-    from .registry import ChainError
-    from .spec import ExperimentError
-
     return (
         ExperimentError,
         ChainError,
@@ -90,13 +87,32 @@ def _overrides(pairs: list[str]) -> dict:
     return out
 
 
+def _ticker(label: str):
+    """A one-line progress display on stderr, for a terminal only.
+
+    Returns ``(show, done)``: ``show(text)`` redraws the line, ``done()`` ends it, so what is
+    printed next starts a line of its own. Under ``--json`` stdout stays the record, since this
+    never writes there. See ``docs/adr/0031``.
+    """
+    if not sys.stderr.isatty():
+        return (lambda text: None), (lambda: None)
+    shown = False
+
+    def show(text: str) -> None:
+        nonlocal shown
+        shown = True
+        print(f"\r{label} {text}", end="", file=sys.stderr, flush=True)
+
+    def done() -> None:
+        nonlocal shown
+        if shown:
+            shown = False
+            print(file=sys.stderr, flush=True)
+
+    return show, done
+
+
 def _check(args) -> int:
-    from strata.project import Project
-
-    from .registry import check
-    from .spec import load
-    from .tasks import check_tasks
-
     experiment = load(args.file, _overrides(args.set))
     check(experiment)
     check_tasks(experiment, Project.load(Path(experiment.project)))
@@ -121,13 +137,6 @@ def _check(args) -> int:
 
 
 def _run(args) -> int:
-    from strata.catalog.config import open_catalog
-    from strata.modelling.stages import Host
-    from strata.project import Project, Settings
-
-    from .run import Handles, run_experiment
-    from .spec import load
-
     experiment = load(args.file, _overrides(args.set))
     project = Project.load(Path(experiment.project))
     settings = Settings.load(args.config)
@@ -142,9 +151,30 @@ def _run(args) -> int:
                 f"{modelling.token_from()} to the same value it was started with."
             )
         host = Host(modelling.url, modelling.token)
-    handles = Handles(project=project, catalog=catalog, catalog_root=Path(config.root), host=host)
+
+    show, done = _ticker("running")
+
+    def state(job: dict) -> None:
+        if job.get("state") == "unreachable":
+            show(f"host unreachable (attempt {job['attempts']}), the round is unaffected")
+            return
+        stage = job.get("stage", job.get("state", ""))
+        if job.get("total"):
+            stage = f"{stage} {job['done']:,}/{job['total']:,}"
+        show(f"host: {stage}")
+
+    handles = Handles(
+        project=project,
+        catalog=catalog,
+        catalog_root=Path(config.root),
+        host=host,
+        on_progress=lambda fetched, total: show(f"materialising {fetched}/{total}"),
+        on_state=state,
+        on_epoch=lambda epoch, total, _metrics: show(f"epoch {epoch}/{total}"),
+    )
 
     def say(event, trial, record) -> None:
+        done()
         if args.json:
             return
         if event == "trial":
@@ -153,7 +183,10 @@ def _run(args) -> int:
             summary = _summary(record)
             print(f"  {record.index + 1:02d} {record.stage:<12} {event:<7}{summary}")
 
-    results = run_experiment(experiment, handles, on_event=say)
+    try:
+        results = run_experiment(experiment, handles, on_event=say)
+    finally:
+        done()
 
     if args.json:
         payload = [
@@ -178,9 +211,6 @@ def _run(args) -> int:
 
 
 def _report(args) -> int:
-    from . import report
-    from .spec import load
-
     trials = []
     for path in args.files:
         experiment = load(path)
@@ -228,8 +258,7 @@ def _summary(record) -> str:
     if record.stage == "train":
         return f"  run {body['run_id']}" + (" (cold)" if not body["parent_run_id"] else "")
     if record.stage == "evaluate":
-        # Each checkpoint's line under the last's, where there were several.
-        # docs/adr/0054
+        # A line per checkpoint where there were several. docs/adr/0054
         checkpoints = body.get("checkpoints") or []
         scored = (
             [(c["name"], c["scores"]) for c in checkpoints]

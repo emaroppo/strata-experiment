@@ -95,35 +95,6 @@ def messages(writing, tmp_path) -> Catalog:
     return catalog
 
 
-def _file(writing, tmp_path, evaluate: str = "") -> Path:
-    path = tmp_path / "writing.toml"
-    path.write_text(f'''
-project = "{writing.root}"
-name = "writing"
-
-[[stage]]
-use = "dataset"
-val_ratio = 0.2
-holdout_ratio = 0.2
-
-[[stage]]
-use = "materialise"
-
-[[stage]]
-use = "split"
-
-[[stage]]
-use = "train"
-fresh = true
-
-[[stage]]
-use = "evaluate"
-on = "holdout"
-{evaluate}
-''')
-    return path
-
-
 def _handles(project, catalog, tmp_path) -> Handles:
     return Handles(project=project, catalog=catalog, catalog_root=tmp_path / "catalog")
 
@@ -134,9 +105,9 @@ def _handles(project, catalog, tmp_path) -> Handles:
 
 
 def test_a_generator_is_scored_at_every_checkpoint_and_its_outputs_kept_beside_the_records(
-    writing, messages, tmp_path
+    writing, messages, tmp_path, write_experiment
 ):
-    experiment = load(_file(writing, tmp_path))
+    experiment = load(write_experiment(writing, "writing"))
     [result] = run_experiment(experiment, _handles(writing, messages, tmp_path))
 
     evaluated = result.records[-1].record
@@ -159,8 +130,10 @@ def test_a_generator_is_scored_at_every_checkpoint_and_its_outputs_kept_beside_t
     assert again.reused == 5 and again.records[-1].record == evaluated
 
 
-def test_the_report_sets_a_runs_checkpoints_one_under_the_other(writing, messages, tmp_path):
-    experiment = load(_file(writing, tmp_path))
+def test_the_report_sets_a_runs_checkpoints_one_under_the_other(
+    writing, messages, tmp_path, write_experiment
+):
+    experiment = load(write_experiment(writing, "writing"))
     run_experiment(experiment, _handles(writing, messages, tmp_path))
 
     table = rows(scored(experiment, ledger_for(experiment)))
@@ -172,24 +145,32 @@ def test_the_report_sets_a_runs_checkpoints_one_under_the_other(writing, message
     assert "F1" not in header
 
 
-def test_a_file_can_score_only_the_checkpoints_it_names(writing, messages, tmp_path):
-    experiment = load(_file(writing, tmp_path, 'checkpoints = ["epoch-1"]'))
+def test_a_file_can_score_only_the_checkpoints_it_names(
+    writing, messages, tmp_path, write_experiment
+):
+    experiment = load(write_experiment(writing, "writing", evaluate='checkpoints = ["epoch-1"]'))
     [result] = run_experiment(experiment, _handles(writing, messages, tmp_path))
     assert list(result.by_checkpoint) == ["epoch-1"]
     assert result.records[-1].request["checkpoints"] == ["epoch-1"]
 
 
-def test_a_file_can_give_the_generation_settings_and_seed(writing, messages, tmp_path):
-    experiment = load(_file(writing, tmp_path, "settings = { temperature = 0.5 }\nseed = 3"))
+def test_a_file_can_give_the_generation_settings_and_seed(
+    writing, messages, tmp_path, write_experiment
+):
+    experiment = load(
+        write_experiment(writing, "writing", evaluate="settings = { temperature = 0.5 }\nseed = 3")
+    )
     [result] = run_experiment(experiment, _handles(writing, messages, tmp_path))
     request = result.records[-1].request
     assert (request["settings"], request["seed"]) == ({"temperature": 0.5}, 3)
 
 
 def test_a_label_task_for_a_generator_is_refused_before_anything_trains(
-    writing, messages, tmp_path
+    writing, messages, tmp_path, write_experiment
 ):
-    experiment = load(_file(writing, tmp_path, 'tasks = [{ use = "classify" }]'))
+    experiment = load(
+        write_experiment(writing, "writing", evaluate='tasks = [{ use = "classify" }]')
+    )
     with pytest.raises(StageError, match="scores a label model's predictions"):
         run_experiment(experiment, _handles(writing, messages, tmp_path))
     assert not list((writing.root / "experiments").rglob("*.json"))
@@ -281,10 +262,12 @@ def test_a_warm_start_from_a_named_checkpoint_is_a_train_argument(
     assert warm.records[3].record["parent_run_id"] == first.run_id
 
 
-def test_the_run_command_prints_each_checkpoints_scores(writing, messages, tmp_path, capsys):
+def test_the_run_command_prints_each_checkpoints_scores(
+    writing, messages, tmp_path, write_experiment, capsys
+):
     config = tmp_path / "config.toml"
     config.write_text(f'[catalog]\nroot = "{tmp_path / "catalog"}"\n')
-    assert main(["run", str(_file(writing, tmp_path)), "--config", str(config)]) == 0
+    assert main(["run", str(write_experiment(writing, "writing")), "--config", str(config)]) == 0
     out = capsys.readouterr().out
     assert "holdout text-generation @epoch-1:" in out
     assert "holdout text-generation @epoch-2:" in out
